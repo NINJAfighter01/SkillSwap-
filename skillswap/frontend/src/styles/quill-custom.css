@@ -1,0 +1,223 @@
+/* Quill Editor Custom Styles */
+
+/* Light Theme Styles */
+.quill-light .ql-toolbar {
+  background: #f9fafb;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  border-color: #d1d5db;
+}
+
+.quill-light .ql-container {
+  background: white;
+  color: #1f2937;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  border-color: #d1d5db;
+  font-size: 14px;
+}
+
+.quill-light .ql-editor {
+  min-height: 200px;
+  color: #1f2937;
+}
+
+.quill-light .ql-editor.ql-blank::before {
+  color: #9ca3af;
+  font-style: normal;
+}
+
+/* Dark Theme Styles */
+.quill-dark .ql-toolbar {
+  background: #374151;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  border-color: #4b5563;
+}
+
+.quill-dark .ql-container {
+  background: #374151;
+  color: #e5e7eb;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  border-color: #4b5563;
+  font-size: 14px;
+}
+
+.quill-dark .ql-editor {
+  min-height: 200px;
+  color: #e5e7eb;
+}
+
+.quill-dark .ql-editor.ql-blank::before {
+  color: #9ca3af;
+  font-style: normal;
+}
+
+/* Toolbar button colors for dark theme */
+.quill-dark .ql-stroke {
+  stroke: #e5e7eb;
+}
+
+.quill-dark .ql-fill {
+  fill: #e5e7eb;
+}
+
+.quill-dark .ql-picker-label {
+  color: #e5e7eb;
+}
+
+.quill-dark .ql-toolbar button:hover,
+.quill-dark .ql-toolbar button:focus {
+  background: #4b5563;
+}
+
+.quill-dark .ql-toolbar button.ql-active {
+  background: #6366f1;
+}
+
+/* Prose styles for rendered content */
+.prose h1 {
+  font-size: 2em;
+  font-weight: bold;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose h2 {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose h3 {
+  font-size: 1.25em;
+  font-weight: bold;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.prose ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.prose li {
+  margin: 0.25em 0;
+}
+
+.prose pre {
+  background: #1f2937;
+  color: #e5e7eb;
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+  font-family: 'Courier New', monospace;
+}
+
+.prose code {
+  background: #1f2937;
+  color: #e5e7eb;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.prose strong {
+  font-weight: bold;
+}
+
+.prose em {
+  font-style: italic;
+}
+
+.prose u {
+  text-decoration: underline;
+}
+
+.prose a {
+  color: #6366f1;
+  text-decoration: underline;
+}
+
+.prose a:hover {
+  color: #818cf8;
+}
+
+/* Quill editor specific styles */
+.ql-editor strong {
+  font-weight: bold;
+}
+
+.ql-editor em {
+  font-style: italic;
+}
+
+.ql-editor u {
+  text-decoration: underline;
+}
+
+.ql-editor s {
+  text-decoration: line-through;
+}
+
+.ql-editor h1 {
+  font-size: 2em;
+  font-weight: bold;
+}
+
+.ql-editor h2 {
+  font-size: 1.5em;
+  font-weight: bold;
+}
+
+.ql-editor h3 {
+  font-size: 1.25em;
+  font-weight: bold;
+}
+
+.ql-editor ul {
+  padding-left: 1.5em;
+}
+
+.ql-editor ol {
+  padding-left: 1.5em;
+}
+
+.ql-editor pre {
+  background: #1f2937;
+  color: #e5e7eb;
+  padding: 1em;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+.ql-editor code {
+  background: #1f2937;
+  color: #e5e7eb;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+}
+
+/* Syntax highlighting */
+.ql-syntax {
+  background: #1f2937;
+  color: #e5e7eb;
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  display: block;
+  margin: 0.5em 0;
+}

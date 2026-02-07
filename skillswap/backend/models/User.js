@@ -69,6 +69,14 @@ const User = sequelize.define(
       type: DataTypes.FLOAT,
       defaultValue: 0,
     },
+    averageRating: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0,
+    },
+    totalReviews: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
   },
   {
     timestamps: true,

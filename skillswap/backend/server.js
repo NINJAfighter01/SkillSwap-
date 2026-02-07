@@ -12,6 +12,9 @@ const paymentRoutes = require('./routes/paymentRoutes')
 const userRoutes = require('./routes/userRoutes')
 const feedbackRoutes = require('./routes/feedbackRoutes')
 const contactRoutes = require('./routes/contactRoutes')
+const skillRoutes = require('./routes/skillRoutes')
+const sessionRoutes = require('./routes/sessionRoutes')
+const reviewRoutes = require('./routes/reviewRoutes')
 
 // Import models
 const User = require('./models/User')
@@ -23,6 +26,11 @@ const TokenHistory = require('./models/TokenHistory')
 const Progress = require('./models/Progress')
 const Feedback = require('./models/Feedback')
 const Contact = require('./models/Contact')
+const Skill = require('./models/Skill')
+const UserSkill = require('./models/UserSkill')
+const Session = require('./models/Session')
+const Review = require('./models/Review')
+const Rating = require('./models/Rating')
 
 const app = express()
 
@@ -39,6 +47,9 @@ app.use('/payments', paymentRoutes)
 app.use('/users', userRoutes)
 app.use('/feedback', feedbackRoutes)
 app.use('/contact', contactRoutes)
+app.use('/api/skills', skillRoutes)
+app.use('/api/sessions', sessionRoutes)
+app.use('/api/reviews', reviewRoutes)
 
 // Health check
 app.get('/health', (req, res) => {

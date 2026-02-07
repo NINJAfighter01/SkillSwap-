@@ -15,12 +15,11 @@ const Navbar = () => {
 
   const menuItems = [
     { label: 'Home', path: '/' },
-    { label: 'How It Works', path: '/how-it-works' },
-    { label: 'About', path: '/about' },
+    { label: 'Learn Anything', path: '/learn-anything' },
+    { label: 'Top Mentors', path: '/top-mentors' },
+    { label: 'My Sessions', path: '/my-sessions' },
+    { label: 'Become Mentor', path: '/become-mentor' },
     { label: 'Contact', path: '/contact' },
-    { label: 'Feedback', path: '/feedback' },
-    { label: 'Blog', path: '/blog' },
-    { label: 'Info', path: '/info' },
   ]
 
   return (

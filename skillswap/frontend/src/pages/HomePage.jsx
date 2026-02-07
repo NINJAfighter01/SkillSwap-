@@ -100,6 +100,11 @@ const HomePage = () => {
               title: 'Interactive Notes',
               desc: 'Take and organize notes while watching lectures'
             },
+            {
+              icon: '💬',
+              title: 'Share Feedback',
+              desc: 'Help us improve by sharing your thoughts and suggestions'
+            },
           ].map((feature, idx) => (
             <div
               key={idx}
@@ -110,11 +115,14 @@ const HomePage = () => {
                 if (feature.title === 'Interactive Notes') {
                   navigate('/interactive-notes')
                 }
+                if (feature.title === 'Share Feedback') {
+                  navigate('/feedback')
+                }
               }}
               className={`rounded-lg p-8 text-center ${
                 isDark ? 'bg-gray-800' : 'bg-white'
               } shadow-lg ${
-                (feature.title === 'Lecture Streaming' || feature.title === 'Interactive Notes') 
+                (feature.title === 'Lecture Streaming' || feature.title === 'Interactive Notes' || feature.title === 'Share Feedback') 
                   ? 'cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-300' 
                   : ''
               }`}
@@ -165,7 +173,6 @@ const HomePage = () => {
               <h3 className="font-bold text-lg mb-4">Contact</h3>
               <ul className="space-y-2">
                 <li><a href="/contact" className="text-gray-300 hover:text-white">Help Center</a></li>
-                <li><a href="/feedback" className="text-gray-300 hover:text-white">Support Community</a></li>
                 <li className="text-gray-300">Email: support@skillswap.com</li>
                 <li className="text-gray-300">Phone: +91-XXXX-XXXX</li>
               </ul>

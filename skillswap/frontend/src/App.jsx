@@ -22,6 +22,12 @@ import Info from './pages/Info'
 import Feedback from './pages/Feedback'
 import Profile from './pages/Profile'
 import ProgressPage from './pages/ProgressPage'
+import LearnAnything from './pages/LearnAnything'
+import SkillDetail from './pages/SkillDetail'
+import MySessions from './pages/MySessions'
+import BecomeaMentor from './pages/BecomeaMentor'
+import MentorProfile from './pages/MentorProfile'
+import TopMentors from './pages/TopMentors'
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useContext(AuthContext)
@@ -171,6 +177,56 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ProgressPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Peer-to-Peer Learning Routes */}
+        <Route
+          path="/learn-anything"
+          element={
+            <ProtectedRoute>
+              <LearnAnything />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/skill/:id"
+          element={
+            <ProtectedRoute>
+              <SkillDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/become-mentor"
+          element={
+            <ProtectedRoute>
+              <BecomeaMentor />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/my-sessions"
+          element={
+            <ProtectedRoute>
+              <MySessions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/mentor/:mentorId"
+          element={
+            <ProtectedRoute>
+              <MentorProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/top-mentors"
+          element={
+            <ProtectedRoute>
+              <TopMentors />
             </ProtectedRoute>
           }
         />
