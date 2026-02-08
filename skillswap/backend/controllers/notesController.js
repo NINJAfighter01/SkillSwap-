@@ -43,18 +43,35 @@ exports.getNotes = async (req, res, next) => {
 
 exports.createNote = async (req, res, next) => {
   try {
-    const { lectureId, content } = req.body
+    const { lectureId, content, files, topicName } = req.body
 
-    const lecture = await Lecture.findByPk(lectureId)
-    if (!lecture) {
-      return res.status(404).json({ message: 'Lecture not found' })
+    if (!lectureId && !topicName) {
+      return res.status(400).json({ message: 'Topic name is required' })
+    }
+
+    if (lectureId) {
+      const lecture = await Lecture.findByPk(lectureId)
+      if (!lecture) {
+        return res.status(404).json({ message: 'Lecture not found' })
+      }
     }
 
     const note = await Note.create({
-      lectureId,
+      lectureId: lectureId || null,
+      topicName: topicName ? String(topicName).trim() : null,
       userId: req.userId,
       content,
+      files: files || [],
     })
+
+    const io = req.app.get('io')
+    if (io) {
+      io.to(`user:${req.userId}`).emit('notes:updated', {
+        action: 'create',
+        noteId: note.id,
+        lectureId: note.lectureId,
+      })
+    }
 
     res.status(201).json({
       message: 'Note created successfully',
@@ -79,6 +96,15 @@ exports.updateNote = async (req, res, next) => {
 
     await note.update(req.body)
 
+    const io = req.app.get('io')
+    if (io) {
+      io.to(`user:${req.userId}`).emit('notes:updated', {
+        action: 'update',
+        noteId: note.id,
+        lectureId: note.lectureId,
+      })
+    }
+
     res.json({
       message: 'Note updated successfully',
       note,
@@ -101,6 +127,15 @@ exports.deleteNote = async (req, res, next) => {
     }
 
     await note.destroy()
+
+    const io = req.app.get('io')
+    if (io) {
+      io.to(`user:${req.userId}`).emit('notes:updated', {
+        action: 'delete',
+        noteId: note.id,
+        lectureId: note.lectureId,
+      })
+    }
 
     res.json({ message: 'Note deleted successfully' })
   } catch (error) {

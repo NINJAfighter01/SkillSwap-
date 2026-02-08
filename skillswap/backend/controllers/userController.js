@@ -1,5 +1,8 @@
 const User = require('../models/User')
 const Progress = require('../models/Progress')
+const VideoProgress = require('../models/VideoProgress')
+const Lecture = require('../models/Lecture')
+const Video = require('../models/Video')
 
 exports.getProfile = async (req, res, next) => {
   try {
@@ -25,13 +28,20 @@ exports.updateProfile = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' })
     }
 
-    const { name, bio, isTeacher } = req.body
+    const { name, bio, isTeacher, skills, projects, socialLinks, aiInsights } = req.body
 
-    await user.update({
+    const updateData = {
       name: name || user.name,
       bio: bio || user.bio,
       isTeacher: isTeacher !== undefined ? isTeacher : user.isTeacher,
-    })
+    }
+
+    if (skills !== undefined) updateData.skills = skills
+    if (projects !== undefined) updateData.projects = projects
+    if (socialLinks !== undefined) updateData.socialLinks = socialLinks
+    if (aiInsights !== undefined) updateData.aiInsights = aiInsights
+
+    await user.update(updateData)
 
     res.json({
       message: 'Profile updated successfully',
@@ -41,6 +51,10 @@ exports.updateProfile = async (req, res, next) => {
         email: user.email,
         bio: user.bio,
         isTeacher: user.isTeacher,
+        skills: user.skills,
+        projects: user.projects,
+        socialLinks: user.socialLinks,
+        aiInsights: user.aiInsights,
       },
     })
   } catch (error) {
@@ -50,15 +64,38 @@ exports.updateProfile = async (req, res, next) => {
 
 exports.getProgress = async (req, res, next) => {
   try {
-    const progress = await Progress.findAll({
+    const lectureProgress = await Progress.findAll({
       where: { userId: req.userId },
       include: [
         {
-          model: require('../models/Lecture'),
-          attributes: ['title', 'category'],
+          model: Lecture,
+          attributes: ['id', 'title', 'category', 'duration'],
         },
       ],
+      order: [['updatedAt', 'DESC']],
     })
+
+    const videoProgress = await VideoProgress.findAll({
+      where: { userId: req.userId },
+      include: [
+        {
+          model: Video,
+          attributes: ['id', 'title', 'skillTag', 'level', 'duration'],
+        },
+      ],
+      order: [['updatedAt', 'DESC']],
+    })
+
+    const progress = [
+      ...lectureProgress.map((item) => ({
+        ...item.toJSON(),
+        type: 'lecture',
+      })),
+      ...videoProgress.map((item) => ({
+        ...item.toJSON(),
+        type: 'video',
+      })),
+    ].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
 
     const user = await User.findByPk(req.userId)
 
@@ -68,6 +105,8 @@ exports.getProgress = async (req, res, next) => {
         lecturesCompleted: user.lecturesCompleted,
         tasksCompleted: user.tasksCompleted,
         totalHours: user.totalHours,
+        lectureProgressCount: lectureProgress.length,
+        videoProgressCount: videoProgress.length,
       },
     })
   } catch (error) {
@@ -77,17 +116,52 @@ exports.getProgress = async (req, res, next) => {
 
 exports.updateProgress = async (req, res, next) => {
   try {
-    const { lectureId, completionPercentage } = req.body
+    const { lectureId, videoId, completionPercentage } = req.body
+    const normalizedCompletion = Math.max(0, Math.min(100, Number(completionPercentage) || 0))
 
-    const [progress, created] = await Progress.findOrCreate({
-      where: { userId: req.userId, lectureId },
-      defaults: { completionPercentage, isCompleted: completionPercentage === 100 },
-    })
+    if (!lectureId && !videoId) {
+      return res.status(400).json({ message: 'lectureId or videoId is required' })
+    }
 
-    if (!created) {
-      await progress.update({
-        completionPercentage,
-        isCompleted: completionPercentage === 100,
+    let progress
+    if (lectureId) {
+      const [record, created] = await Progress.findOrCreate({
+        where: { userId: req.userId, lectureId },
+        defaults: { completionPercentage: normalizedCompletion, isCompleted: normalizedCompletion === 100 },
+      })
+
+      if (!created) {
+        await record.update({
+          completionPercentage: normalizedCompletion,
+          isCompleted: normalizedCompletion === 100,
+        })
+      }
+
+      progress = record
+    } else {
+      const [record, created] = await VideoProgress.findOrCreate({
+        where: { userId: req.userId, videoId },
+        defaults: { completionPercentage: normalizedCompletion, isCompleted: normalizedCompletion === 100 },
+      })
+
+      if (!created) {
+        await record.update({
+          completionPercentage: normalizedCompletion,
+          isCompleted: normalizedCompletion === 100,
+        })
+      }
+
+      progress = record
+    }
+
+    const io = req.app.get('io')
+    if (io) {
+      io.to(`user:${req.userId}`).emit('progress:updated', {
+        type: lectureId ? 'lecture' : 'video',
+        lectureId: lectureId || null,
+        videoId: videoId || null,
+        completionPercentage: normalizedCompletion,
+        isCompleted: normalizedCompletion === 100,
       })
     }
 

@@ -55,7 +55,7 @@ const User = sequelize.define(
     },
     isTeacher: {
       type: DataTypes.BOOLEAN,
-      defaultValue: false,
+      defaultValue: true, // Everyone can upload videos by default
     },
     lecturesCompleted: {
       type: DataTypes.INTEGER,
@@ -76,6 +76,22 @@ const User = sequelize.define(
     totalReviews: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
+    },
+    skills: {
+      type: DataTypes.JSON,
+      defaultValue: [],
+    },
+    projects: {
+      type: DataTypes.JSON,
+      defaultValue: [],
+    },
+    socialLinks: {
+      type: DataTypes.JSON,
+      defaultValue: {},
+    },
+    aiInsights: {
+      type: DataTypes.JSON,
+      defaultValue: {},
     },
   },
   {

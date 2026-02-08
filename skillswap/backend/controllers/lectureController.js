@@ -178,6 +178,16 @@ exports.watchLecture = async (req, res, next) => {
       defaults: { completionPercentage: 100, isCompleted: true },
     })
 
+    const io = req.app.get('io')
+    if (io) {
+      io.to(`user:${req.userId}`).emit('progress:updated', {
+        type: 'lecture',
+        lectureId: lecture.id,
+        completionPercentage: 100,
+        isCompleted: true,
+      })
+    }
+
     // Update lecture views
     lecture.views += 1
     await lecture.save()

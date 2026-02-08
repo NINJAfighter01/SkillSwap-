@@ -1,0 +1,276 @@
+{
+  "tables": {
+    "users": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "email": {
+        "type": "STRING",
+        "unique": true,
+        "allowNull": false
+      },
+      "password": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "name": {
+        "type": "STRING",
+        "allowNull": true
+      },
+      "bio": {
+        "type": "TEXT",
+        "allowNull": true
+      },
+      "profile_picture": {
+        "type": "STRING",
+        "allowNull": true
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    },
+    "lectures": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "title": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "description": {
+        "type": "TEXT",
+        "allowNull": true
+      },
+      "video_url": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "teacher_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "users",
+          "key": "id"
+        }
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    },
+    "notes": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "lecture_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "lectures",
+          "key": "id"
+        }
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "users",
+          "key": "id"
+        }
+      },
+      "content": {
+        "type": "TEXT",
+        "allowNull": false
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    },
+    "subscriptions": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "users",
+          "key": "id"
+        }
+      },
+      "plan": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "start_date": {
+        "type": "DATE",
+        "allowNull": false
+      },
+      "end_date": {
+        "type": "DATE",
+        "allowNull": false
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    },
+    "payments": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "users",
+          "key": "id"
+        }
+      },
+      "amount": {
+        "type": "FLOAT",
+        "allowNull": false
+      },
+      "status": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    },
+    "token_history": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "users",
+          "key": "id"
+        }
+      },
+      "transaction_type": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "amount": {
+        "type": "INTEGER",
+        "allowNull": false
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    },
+    "progress": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "users",
+          "key": "id"
+        }
+      },
+      "lecture_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "lectures",
+          "key": "id"
+        }
+      },
+      "status": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    },
+    "feedback": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "allowNull": false,
+        "references": {
+          "model": "users",
+          "key": "id"
+        }
+      },
+      "content": {
+        "type": "TEXT",
+        "allowNull": false
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    },
+    "contacts": {
+      "id": {
+        "type": "INTEGER",
+        "primaryKey": true,
+        "autoIncrement": true
+      },
+      "name": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "email": {
+        "type": "STRING",
+        "allowNull": false
+      },
+      "message": {
+        "type": "TEXT",
+        "allowNull": false
+      },
+      "created_at": {
+        "type": "DATE",
+        "defaultValue": "CURRENT_TIMESTAMP"
+      }
+    }
+  }
+}

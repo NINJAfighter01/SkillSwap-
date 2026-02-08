@@ -3,13 +3,22 @@ const Contact = require('../models/Contact')
 
 exports.submitFeedback = async (req, res, next) => {
   try {
-    const { rating, message } = req.body
+    const { category, subject, rating, message, email } = req.body
 
     const feedback = await Feedback.create({
       userId: req.userId,
+      category,
+      subject,
       rating,
       message,
+      email,
+      status: 'pending',
     })
+
+    // Emit real-time update
+    if (req.app.get('io')) {
+      req.app.get('io').emit('feedback:new', feedback)
+    }
 
     res.status(201).json({
       message: 'Feedback submitted successfully',

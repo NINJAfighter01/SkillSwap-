@@ -13,9 +13,13 @@ const Note = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: false,
     },
+    topicName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     lectureId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'Lectures',
         key: 'id',
@@ -28,6 +32,23 @@ const Note = sequelize.define(
         model: 'Users',
         key: 'id',
       },
+    },
+    files: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: '[]',
+      get() {
+        const rawValue = this.getDataValue('files')
+        if (!rawValue) return []
+        try {
+          return JSON.parse(rawValue)
+        } catch (e) {
+          return []
+        }
+      },
+      set(value) {
+        this.setDataValue('files', JSON.stringify(value || []))
+      }
     },
   },
   {

@@ -4,15 +4,14 @@ import { ThemeContext } from '../context/ThemeContext'
 import notesService from '../services/notesService'
 import lectureService from '../services/lectureService'
 import ReactQuill from 'react-quill'
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
-import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
-import * as mammoth from 'mammoth/mammoth.browser'
-import Papa from 'papaparse'
-import Tesseract from 'tesseract.js'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url'
+import mammoth from 'mammoth'
 import 'react-quill/dist/quill.snow.css'
 import '../styles/quill-custom.css'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 const InteractiveNotes = () => {
   const { isDark } = useContext(ThemeContext)
@@ -23,14 +22,18 @@ const InteractiveNotes = () => {
   const [filter, setFilter] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [newNoteContent, setNewNoteContent] = useState('')
-  const [selectedLectureId, setSelectedLectureId] = useState('')
+  const [topicName, setTopicName] = useState('')
   const [editingNoteId, setEditingNoteId] = useState(null)
   const [editingContent, setEditingContent] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [viewedNoteIds, setViewedNoteIds] = useState(new Set())
-  const [isImporting, setIsImporting] = useState(false)
-  const [importStatus, setImportStatus] = useState('')
-  const [importMode, setImportMode] = useState('replace')
+  const [uploadedFiles, setUploadedFiles] = useState({}) // Files for each note: {noteId: [files]}
+  const [currentFiles, setCurrentFiles] = useState([]) // Files for note being created/edited
+  const [showFileViewer, setShowFileViewer] = useState(false)
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [pdfPage, setPdfPage] = useState(1)
+  const [pdfPages, setPdfPages] = useState(0)
+  const [docxHtml, setDocxHtml] = useState('') // Extracted DOCX HTML content
 
   // Quill editor configuration
   const quillModules = {
@@ -89,114 +92,6 @@ const InteractiveNotes = () => {
     }, 0)
   }
 
-  const escapeHtml = (value) => {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-  }
-
-  const wrapPlainTextAsHtml = (text) => {
-    const safe = escapeHtml(text)
-    return `<p>${safe.replace(/\n/g, '<br/>')}</p>`
-  }
-
-  const mergeImportedContent = (currentContent, importedHtml) => {
-    if (!currentContent || importMode === 'replace') {
-      return importedHtml
-    }
-    return `${currentContent}<hr/><p><strong>Imported Content</strong></p>${importedHtml}`
-  }
-
-  const readFileAsText = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = reject
-      reader.readAsText(file)
-    })
-  }
-
-  const readFileAsArrayBuffer = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = reject
-      reader.readAsArrayBuffer(file)
-    })
-  }
-
-  const extractTextFromPdf = async (file) => {
-    const buffer = await readFileAsArrayBuffer(file)
-    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
-    let fullText = ''
-    for (let pageIndex = 1; pageIndex <= pdf.numPages; pageIndex += 1) {
-      const page = await pdf.getPage(pageIndex)
-      const content = await page.getTextContent()
-      const pageText = content.items.map(item => item.str).join(' ')
-      fullText += `${pageText}\n`
-    }
-    return fullText.trim()
-  }
-
-  const extractTextFromDocx = async (file) => {
-    const buffer = await readFileAsArrayBuffer(file)
-    const result = await mammoth.extractRawText({ arrayBuffer: buffer })
-    return result.value.trim()
-  }
-
-  const extractTextFromCsv = async (file) => {
-    const text = await readFileAsText(file)
-    const parsed = Papa.parse(text, { skipEmptyLines: true })
-    const rows = parsed.data.map(row => row.join(', ')).join('\n')
-    return rows.trim()
-  }
-
-  const extractTextFromImage = async (file) => {
-    const result = await Tesseract.recognize(file, 'eng')
-    return result.data.text.trim()
-  }
-
-  const handleImportFile = async (file, target) => {
-    if (!file) return
-    setIsImporting(true)
-    setImportStatus('Importing...')
-    try {
-      const fileName = file.name.toLowerCase()
-      const fileType = file.type
-      let extractedText = ''
-
-      if (fileType === 'text/plain' || fileName.endsWith('.txt')) {
-        extractedText = await readFileAsText(file)
-      } else if (fileType === 'text/csv' || fileName.endsWith('.csv')) {
-        extractedText = await extractTextFromCsv(file)
-      } else if (fileName.endsWith('.docx')) {
-        extractedText = await extractTextFromDocx(file)
-      } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
-        extractedText = await extractTextFromPdf(file)
-      } else if (fileType.startsWith('image/')) {
-        extractedText = await extractTextFromImage(file)
-      } else {
-        throw new Error('Unsupported file type.')
-      }
-
-      const importedHtml = wrapPlainTextAsHtml(extractedText)
-      if (target === 'add') {
-        setNewNoteContent((current) => mergeImportedContent(current, importedHtml))
-      } else {
-        setEditingContent((current) => mergeImportedContent(current, importedHtml))
-      }
-      setImportStatus(`Imported: ${file.name}`)
-    } catch (error) {
-      console.error('Error importing file:', error)
-      setImportStatus('Import failed. Please try another file.')
-    } finally {
-      setIsImporting(false)
-    }
-  }
-
   // Helper function to format last studied date
   const formatLastStudied = (date) => {
     const now = new Date()
@@ -212,6 +107,164 @@ const InteractiveNotes = () => {
     if (diffDays < 7) return `${diffDays}d ago`
     return noteDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
   }
+
+  // File handling functions
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleFileImport = async (e, mode = 'new') => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    for (const file of files) {
+      try {
+        const base64 = await fileToBase64(file)
+        const fileObj = {
+          id: Date.now() + Math.random(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          base64,
+          uploadedAt: new Date().toISOString()
+        }
+
+        // Save file object (text extraction removed - files are just stored)
+        setCurrentFiles(prev => [...prev, fileObj])
+        alert(`✅ ${file.name} imported successfully!`)
+      } catch (err) {
+        alert(`❌ Failed to import ${file.name}`)
+        console.error(err)
+      }
+    }
+    e.target.value = '' // Reset input
+  }
+
+  const removeFile = (fileId) => {
+    setCurrentFiles(prev => prev.filter(f => f.id !== fileId))
+  }
+
+  const removeFileFromNote = async (noteId, fileId) => {
+    const note = notes.find(n => n.id === noteId)
+    if (!note || !note.files) return
+
+    const updatedFiles = note.files.filter(f => f.id !== fileId)
+    const updatedNotes = notes.map(n =>
+      n.id === noteId ? { ...n, files: updatedFiles } : n
+    )
+    setNotes(updatedNotes)
+    localStorage.setItem('interactiveNotes', JSON.stringify(updatedNotes))
+
+    try {
+      await notesService.updateNote(noteId, { files: updatedFiles })
+    } catch (err) {
+      console.error('Failed to update note files:', err)
+    }
+  }
+
+  const viewFile = async (file) => {
+    console.log('🔍 Opening file viewer for:', file.name, 'Type:', file.type)
+    console.log('📦 File object:', file)
+    
+    setSelectedFile(file)
+    setShowFileViewer(true)
+    setDocxHtml('') // Reset DOCX content
+    
+    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+      console.log('📄 Loading PDF file...')
+      try {
+        const base64Data = file.base64.split(',')[1]
+        const binaryString = atob(base64Data)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+        const pdf = await pdfjsLib.getDocument({ data: bytes }).promise
+        console.log('✅ PDF loaded successfully. Pages:', pdf.numPages)
+        setPdfPages(pdf.numPages)
+        setPdfPage(1)
+        
+        // Wait for modal to render before rendering PDF
+        setTimeout(() => {
+          console.log('🎨 Rendering PDF page 1...')
+          renderPdf(file, 1)
+        }, 300)
+      } catch (err) {
+        console.error('❌ PDF load error:', err)
+        alert('❌ Failed to load PDF file: ' + err.message)
+      }
+    } else if (file.type.includes('word') || file.name.endsWith('.docx') || file.name.endsWith('.doc')) {
+      console.log('📝 Loading Word document...')
+      try {
+        const base64Data = file.base64.split(',')[1]
+        const binaryString = atob(base64Data)
+        const arrayBuffer = new ArrayBuffer(binaryString.length)
+        const uint8Array = new Uint8Array(arrayBuffer)
+        for (let i = 0; i < binaryString.length; i++) {
+          uint8Array[i] = binaryString.charCodeAt(i)
+        }
+        
+        const result = await mammoth.convertToHtml({ arrayBuffer })
+        console.log('✅ Word document converted successfully')
+        setDocxHtml(result.value)
+        
+        if (result.messages.length > 0) {
+          console.warn('DOCX conversion warnings:', result.messages)
+        }
+      } catch (err) {
+        console.error('❌ DOCX load error:', err)
+        alert('❌ Failed to load Word document: ' + err.message)
+      }
+    } else {
+      console.log('📂 Opening non-PDF/DOCX file in viewer')
+    }
+  }
+
+  const renderPdf = async (file, pageNum) => {
+    try {
+      const canvas = document.getElementById('pdf-canvas')
+      if (!canvas) {
+        console.error('Canvas not found')
+        return
+      }
+
+      const base64Data = file.base64.split(',')[1]
+      const binaryString = atob(base64Data)
+      const bytes = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+      }
+      
+      const pdf = await pdfjsLib.getDocument({ data: bytes }).promise
+      const page = await pdf.getPage(pageNum)
+      const viewport = page.getViewport({ scale: 1.5 })
+      
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      
+      const context = canvas.getContext('2d')
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise
+      
+      console.log('PDF rendered successfully:', pageNum)
+    } catch (err) {
+      console.error('PDF render error:', err)
+      alert('❌ Failed to render PDF page')
+    }
+  }
+
+  useEffect(() => {
+    if (showFileViewer && selectedFile?.type === 'application/pdf' && pdfPage > 0) {
+      setTimeout(() => renderPdf(selectedFile, pdfPage), 100)
+    }
+  }, [pdfPage, showFileViewer])
 
   // Track note as studied when user views it (called explicitly, not during render)
   const handleNoteView = (noteId) => {
@@ -324,7 +377,7 @@ const InteractiveNotes = () => {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>${note.Lecture?.title || 'Lecture'} - SkillSwap Notes</title>
+  <title>${note.topicName || note.Lecture?.title || 'Notes'} - SkillSwap Notes</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -363,8 +416,9 @@ const InteractiveNotes = () => {
 </head>
 <body>
   <div class="header">
-    <h1>📝 ${note.Lecture?.title || 'Lecture Notes'}</h1>
+    <h1>📝 ${note.topicName || note.Lecture?.title || 'Notes'}</h1>
     <div class="session-info">
+      <p><strong>📝 Topic:</strong> ${note.topicName || 'N/A'}</p>
       <p><strong>🎯 Category:</strong> ${note.Lecture?.category || 'N/A'}</p>
       <p><strong>🏫 Mentor:</strong> ${note.Lecture?.teacherName || 'Unknown'}</p>
       <p><strong>⏱️ Duration:</strong> ${note.Lecture?.duration || 'N/A'} minutes</p>
@@ -383,7 +437,7 @@ const InteractiveNotes = () => {
     `
     const file = new Blob([htmlContent], { type: 'text/html' })
     element.href = URL.createObjectURL(file)
-    element.download = `note-${note.Lecture?.title || 'lecture'}.html`
+    element.download = `note-${note.topicName || note.Lecture?.title || 'note'}.html`
     document.body.appendChild(element)
     element.click()
     document.body.removeChild(element)
@@ -391,24 +445,32 @@ const InteractiveNotes = () => {
 
   const handleAddNote = async () => {
     const plainText = newNoteContent.replace(/<[^>]*>/g, '').trim()
-    if (!plainText || !selectedLectureId) {
-      alert('Please select a lecture and write something')
+    if (!plainText || !topicName.trim()) {
+      alert('Please enter a topic name and write something')
       return
     }
 
+    console.log('💾 Saving note with files:', currentFiles)
+    console.log('📊 Files count:', currentFiles.length)
+    
     setIsSaving(true)
     
     // Create local note object
     const localNote = {
       id: Date.now(), // Temporary ID
-      lectureId: selectedLectureId,
+      topicName: topicName.trim(),
+      lectureId: null,
       content: newNoteContent,
+      files: currentFiles, // Include uploaded files
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastStudied: new Date().toISOString(),
       isCompleted: false,
-      Lecture: lectures.find(l => String(l.id) === String(selectedLectureId)) || {}
+      Lecture: null,
     }
+    
+    console.log('📝 Local note created:', localNote)
+    console.log('✅ Files in note:', localNote.files?.length || 0)
     
     // Add to state and localStorage immediately
     const updatedNotes = [localNote, ...notes]
@@ -417,20 +479,24 @@ const InteractiveNotes = () => {
     
     try {
       const response = await notesService.createNote({
-        lectureId: selectedLectureId,
-        content: newNoteContent
+        topicName: topicName.trim(),
+        content: newNoteContent,
+        files: currentFiles
       })
+      console.log('✅ Note saved to backend:', response.data.note)
       // Replace local note with backend note
       setNotes([response.data.note, ...notes])
       localStorage.setItem('interactiveNotes', JSON.stringify([response.data.note, ...notes]))
       setNewNoteContent('')
-      setSelectedLectureId('')
+      setTopicName('')
+      setCurrentFiles([]) // Reset files
       setShowAddForm(false)
       alert('✅ Note added successfully!')
     } catch (error) {
       console.error('Error adding note:', error)
       setNewNoteContent('')
-      setSelectedLectureId('')
+      setTopicName('')
+      setCurrentFiles([]) // Reset files
       setShowAddForm(false)
       alert('✅ Note saved locally (backend offline)')
     }
@@ -446,22 +512,33 @@ const InteractiveNotes = () => {
 
     setIsSaving(true)
     
-    // Update locally first
-    const updatedNotes = notes.map(note => 
-      note.id === noteId ? { ...note, content: editingContent, updatedAt: new Date().toISOString() } : note
+    const note = notes.find(n => n.id === noteId)
+    // Update locally first - merge new files with existing ones
+    const updatedNotes = notes.map(n => 
+      n.id === noteId ? { 
+        ...n, 
+        content: editingContent, 
+        files: [...(n.files || []), ...currentFiles],
+        updatedAt: new Date().toISOString() 
+      } : n
     )
     setNotes(updatedNotes)
     localStorage.setItem('interactiveNotes', JSON.stringify(updatedNotes))
     
     try {
-      await notesService.updateNote(noteId, { content: editingContent })
+      await notesService.updateNote(noteId, { 
+        content: editingContent,
+        files: [...(note.files || []), ...currentFiles]
+      })
       setEditingNoteId(null)
       setEditingContent('')
+      setCurrentFiles([]) // Reset files
       alert('✅ Note updated successfully!')
     } catch (error) {
       console.error('Error updating note:', error)
       setEditingNoteId(null)
       setEditingContent('')
+      setCurrentFiles([]) // Reset files
       alert('✅ Note updated locally (backend offline)')
     }
     setIsSaving(false)
@@ -474,6 +551,7 @@ const InteractiveNotes = () => {
 
   const filteredNotes = notes.filter(note =>
     note.content?.toLowerCase().includes(filter.toLowerCase()) ||
+    note.topicName?.toLowerCase().includes(filter.toLowerCase()) ||
     note.Lecture?.title?.toLowerCase().includes(filter.toLowerCase()) ||
     note.Lecture?.category?.toLowerCase().includes(filter.toLowerCase()) ||
     note.Lecture?.teacherName?.toLowerCase().includes(filter.toLowerCase())
@@ -490,12 +568,14 @@ const InteractiveNotes = () => {
               <p className="text-xl">Take and organize notes from your SkillSwap learning sessions</p>
               <p className="text-sm mt-2 opacity-90">Track your learning journey with detailed notes linked to sessions, mentors, and skills</p>
             </div>
-            <button
-              onClick={fetchNotes}
-              className="px-6 py-3 bg-white text-purple-600 rounded-lg hover:bg-gray-100 font-bold transition"
-            >
-              🔄 Refresh
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={fetchNotes}
+                className="px-6 py-3 bg-white text-purple-600 rounded-lg hover:bg-gray-100 font-bold transition"
+              >
+                🔄 Refresh
+              </button>
+            </div>
           </div>
         </div>
 
@@ -538,90 +618,99 @@ const InteractiveNotes = () => {
             <div className="space-y-4">
               <div>
                 <label className={`block text-sm font-bold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Select Session / Lecture:
+                  Topic Name:
                 </label>
-                <select
-                  value={selectedLectureId}
-                  onChange={(e) => setSelectedLectureId(e.target.value)}
+                <input
+                  type="text"
+                  value={topicName}
+                  onChange={(e) => setTopicName(e.target.value)}
+                  placeholder="e.g., React Hooks, SQL Joins, Interview Prep"
                   className={`w-full p-3 rounded-lg border-2 ${
                     isDark
                       ? 'bg-gray-700 border-gray-600 text-white'
                       : 'bg-white border-gray-300 text-black'
                   } focus:outline-none focus:border-purple-500`}
-                >
-                  <option value="">-- Choose a session / lecture --</option>
-                  {lectures.map((lecture) => (
-                    <option key={lecture.id} value={lecture.id}>
-                      {lecture.title} | {lecture.category} | By {lecture.teacherName || 'Unknown'} | {lecture.duration}min {lecture.isPremium ? '⭐ Premium' : ''}
-                    </option>
-                  ))}
-                </select>
-                {selectedLectureId && (
-                  <div className={`mt-2 p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                    {(() => {
-                      const selectedLecture = lectures.find(l => String(l.id) === String(selectedLectureId))
-                      return (
-                        <>
-                          <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            🎯 <strong>Skill:</strong> {selectedLecture?.category || 'N/A'}
-                          </p>
-                          <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            🎫 <strong>Mentor:</strong> {selectedLecture?.teacherName || 'Unknown'}
-                          </p>
-                          <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            ⏱️ <strong>Duration:</strong> {selectedLecture?.duration || 'N/A'} minutes
-                          </p>
-                        </>
-                      )
-                    })()}
-                  </div>
-                )}
+                />
               </div>
               <div>
                 <label className={`block text-sm font-bold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                   Your Notes:
                 </label>
-                <div className={`mb-3 p-3 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <input
-                      type="file"
-                      accept=".txt,.pdf,.docx,.csv,image/*"
-                      disabled={isImporting}
-                      onChange={(e) => handleImportFile(e.target.files?.[0], 'add')}
-                      className={`flex-1 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}
-                    />
-                    <label className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                      <input
-                        type="radio"
-                        name="importModeAdd"
-                        value="replace"
-                        checked={importMode === 'replace'}
-                        onChange={() => setImportMode('replace')}
-                      />
-                      Replace
-                    </label>
-                    <label className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                      <input
-                        type="radio"
-                        name="importModeAdd"
-                        value="append"
-                        checked={importMode === 'append'}
-                        onChange={() => setImportMode('append')}
-                      />
-                      Append
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setNewNoteContent('')}
-                      className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-bold hover:bg-gray-700 transition"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <p className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Supported: TXT, PDF, DOCX, CSV, Images. {importStatus && `Status: ${importStatus}`}
-                  </p>
+
+                {/* File Import Section */}
+                <div className={`mb-3 p-4 rounded-lg border-2 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-300'}`}>
+                  <label className={`block text-sm font-bold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    📎 Import Files (PDF, DOCX, CSV, TXT, Images)
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.csv,.txt,image/*"
+                    onChange={(e) => {
+                      console.log('Files selected:', e.target.files.length)
+                      handleFileImport(e, 'new')
+                    }}
+                    className={`w-full p-2 border rounded ${isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`}
+                  />
+                  {currentFiles.length > 0 && (
+                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900 rounded border border-blue-200 dark:border-blue-700">
+                      <p className={`text-sm font-bold mb-2 ${isDark ? 'text-blue-200' : 'text-blue-900'}`}>
+                        ✅ Files to be added ({currentFiles.length}):
+                      </p>
+                      <div className="space-y-2">
+                        {currentFiles.map((file) => {
+                          const getFileIcon = (type, name) => {
+                            if (type.startsWith('image/')) return '🖼️'
+                            if (type === 'application/pdf' || name.endsWith('.pdf')) return '📄'
+                            if (type.includes('word') || type.includes('document') || name.endsWith('.docx')) return '📝'
+                            if (type === 'text/csv' || name.endsWith('.csv')) return '📊'
+                            if (type === 'text/plain' || name.endsWith('.txt')) return '📃'
+                            return '📎'
+                          }
+                          
+                          return (
+                            <div key={file.id} className={`flex items-center justify-between p-3 rounded border ${isDark ? 'bg-gray-600 border-gray-500' : 'bg-white border-gray-200'}`}>
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="text-xl">{getFileIcon(file.type, file.name)}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    {file.name}
+                                  </p>
+                                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {(file.size / 1024).toFixed(2)} KB
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    console.log('Viewing file:', file.name, 'Type:', file.type)
+                                    viewFile(file)
+                                  }}
+                                  className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition"
+                                >
+                                  👁️ View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    console.log('Removing file:', file.name)
+                                    removeFile(file.id)
+                                  }}
+                                  className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition"
+                                >
+                                  🗑️ Remove
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
+
                 <div className={`rounded-lg border-2 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
                   <ReactQuill
                     theme="snow"
@@ -650,7 +739,7 @@ const InteractiveNotes = () => {
                   onClick={() => {
                     setShowAddForm(false)
                     setNewNoteContent('')
-                    setSelectedLectureId('')
+                    setTopicName('')
                   }}
                   className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition font-bold"
                 >
@@ -717,52 +806,13 @@ const InteractiveNotes = () => {
                     <h3 className="text-xl font-bold mb-2">✏️ Edit Note</h3>
                     <div className={`p-3 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                       <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                        🎯 <strong>Session:</strong> {note.Lecture?.title}
+                        📝 <strong>Topic:</strong> {note.topicName || note.Lecture?.title || 'Untitled'}
                       </p>
-                      <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                        🎫 <strong>Mentor:</strong> {note.Lecture?.teacherName || 'Unknown'}
-                      </p>
-                    </div>
-                    <div className={`mb-3 p-3 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <input
-                          type="file"
-                          accept=".txt,.pdf,.docx,.csv,image/*"
-                          disabled={isImporting}
-                          onChange={(e) => handleImportFile(e.target.files?.[0], 'edit')}
-                          className={`flex-1 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}
-                        />
-                        <label className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                          <input
-                            type="radio"
-                            name="importModeEdit"
-                            value="replace"
-                            checked={importMode === 'replace'}
-                            onChange={() => setImportMode('replace')}
-                          />
-                          Replace
-                        </label>
-                        <label className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                          <input
-                            type="radio"
-                            name="importModeEdit"
-                            value="append"
-                            checked={importMode === 'append'}
-                            onChange={() => setImportMode('append')}
-                          />
-                          Append
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setEditingContent('')}
-                          className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-bold hover:bg-gray-700 transition"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                      <p className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Supported: TXT, PDF, DOCX, CSV, Images. {importStatus && `Status: ${importStatus}`}
-                      </p>
+                      {note.Lecture?.teacherName && (
+                        <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                          🎫 <strong>Mentor:</strong> {note.Lecture.teacherName}
+                        </p>
+                      )}
                     </div>
                     <div className={`rounded-lg border-2 mb-3 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
                       <ReactQuill
@@ -775,6 +825,113 @@ const InteractiveNotes = () => {
                         style={{ height: '200px', marginBottom: '42px' }}
                       />
                     </div>
+
+                    {/* File Import Section */}
+                    <div className={`mb-3 p-4 rounded-lg border-2 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                      <label className={`block mb-2 text-sm font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        📎 Import Files (PDF, DOCX, CSV, TXT, Images)
+                      </label>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.docx,.csv,.txt,image/*"
+                        onChange={(e) => handleFileImport(e, 'edit')}
+                        className={`w-full p-2 rounded border ${isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`}
+                      />
+                      
+                      {/* Display Current Files Being Added */}
+                      {currentFiles.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className={`text-xs font-bold ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            Files to be added ({currentFiles.length}):
+                          </p>
+                          {currentFiles.map((file) => (
+                            <div 
+                              key={file.id} 
+                              className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-gray-600' : 'bg-white'}`}
+                            >
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className="text-xl">
+                                  {file.type.startsWith('image/') ? '🖼️' : 
+                                   file.type === 'application/pdf' ? '📄' : 
+                                   file.type.includes('word') ? '📝' : 
+                                   file.type === 'text/csv' ? '📊' : '📃'}
+                                </span>
+                                <div className="flex-1">
+                                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    {file.name}
+                                  </p>
+                                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {(file.size / 1024).toFixed(2)} KB
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => viewFile(file)}
+                                  className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition"
+                                >
+                                  👁️ View
+                                </button>
+                                <button
+                                  onClick={() => removeFile(file.id)}
+                                  className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition"
+                                >
+                                  🗑️ Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Display Existing Files */}
+                      {note.files && note.files.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className={`text-xs font-bold ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            Existing files ({note.files.length}):
+                          </p>
+                          {note.files.map((file) => (
+                            <div 
+                              key={file.id} 
+                              className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}
+                            >
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className="text-xl">
+                                  {file.type.startsWith('image/') ? '🖼️' : 
+                                   file.type === 'application/pdf' ? '📄' : 
+                                   file.type.includes('word') ? '📝' : 
+                                   file.type === 'text/csv' ? '📊' : '📃'}
+                                </span>
+                                <div className="flex-1">
+                                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    {file.name}
+                                  </p>
+                                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {(file.size / 1024).toFixed(2)} KB
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => viewFile(file)}
+                                  className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition"
+                                >
+                                  👁️ View
+                                </button>
+                                <button
+                                  onClick={() => removeFileFromNote(note.id, file.id)}
+                                  className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition"
+                                >
+                                  🗑️ Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <p className={`mb-4 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                       📝 {editingContent.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(w => w.length > 0).length} words | 🔤 {editingContent.replace(/<[^>]*>/g, '').length} characters | ⏱️ {calculateReadingTime(editingContent)}
                     </p>
@@ -803,33 +960,30 @@ const InteractiveNotes = () => {
                         <div className="flex items-center gap-2 mb-2">
                           <h3 
                             className="text-xl font-bold cursor-pointer hover:text-purple-600 transition"
-                            onClick={() => navigate(`/lecture/${note.Lecture?.id}`)}
+                            onClick={() => note.Lecture?.id && navigate(`/lecture/${note.Lecture?.id}`)}
                           >
-                            🎯 {note.Lecture?.title || 'Untitled Lecture'}
+                            📝 {note.topicName || note.Lecture?.title || 'Untitled Note'}
                           </h3>
                           {note.Lecture?.isPremium && (
                             <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-bold rounded">⭐ Premium</span>
                           )}
                         </div>
-                        <div className={`flex items-center gap-4 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
-                          <span className="flex items-center gap-1">
-                            📚 <strong>Category:</strong> {note.Lecture?.category || 'N/A'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            🎫 <strong>Mentor:</strong> {note.Lecture?.teacherName || 'Unknown'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            ⏱️ <strong>Duration:</strong> {note.Lecture?.duration || 'N/A'} min
-                          </span>
-                        </div>
-                        {note.Lecture?.createdAt && (
-                          <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                            📅 Session Date: {new Date(note.Lecture.createdAt).toLocaleDateString('en-IN', { 
-                              day: 'numeric', 
-                              month: 'long', 
-                              year: 'numeric'
-                            })}
-                          </p>
+                        {note.Lecture ? (
+                          <div className={`flex items-center gap-4 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
+                            <span className="flex items-center gap-1">
+                              📚 <strong>Category:</strong> {note.Lecture?.category || 'N/A'}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              🎫 <strong>Mentor:</strong> {note.Lecture?.teacherName || 'Unknown'}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              ⏱️ <strong>Duration:</strong> {note.Lecture?.duration || 'N/A'} min
+                            </span>
+                          </div>
+                        ) : (
+                          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
+                            🧠 Personal topic note
+                          </div>
                         )}
                       </div>
                       <div className="text-right">
@@ -878,6 +1032,54 @@ const InteractiveNotes = () => {
                         </p>
                       </div>
                     </div>
+
+                    {/* Uploaded Files Display */}
+                    {note.files && note.files.length > 0 && (
+                      <div className={`mb-4 p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                        <h4 className={`text-lg font-bold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          📎 Uploaded Files ({note.files.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {note.files.map((file) => (
+                            <div 
+                              key={file.id} 
+                              className={`flex items-center justify-between p-3 rounded-lg border ${isDark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'}`}
+                            >
+                              <div className="flex items-center gap-3 flex-1">
+                                <span className="text-2xl">
+                                  {file.type.startsWith('image/') ? '🖼️' : 
+                                   file.type === 'application/pdf' ? '📄' : 
+                                   file.type.includes('word') ? '📝' : 
+                                   file.type === 'text/csv' ? '📊' : '📃'}
+                                </span>
+                                <div className="flex-1">
+                                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    {file.name}
+                                  </p>
+                                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {(file.size / 1024).toFixed(2)} KB • Uploaded: {new Date(file.uploadedAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => viewFile(file)}
+                                  className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold text-sm"
+                                >
+                                  👁️ View
+                                </button>
+                                <button
+                                  onClick={() => removeFileFromNote(note.id, file.id)}
+                                  className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-bold text-sm"
+                                >
+                                  🗑️ Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Progress Indicator */}
                     <div className="mb-4">
@@ -949,6 +1151,180 @@ const InteractiveNotes = () => {
           </div>
         )}
       </div>
+
+      {/* File Viewer Modal */}
+      {showFileViewer && selectedFile && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4"
+          style={{ zIndex: 9999 }}
+        >
+          <div className={`relative w-full max-w-4xl max-h-[90vh] overflow-auto rounded-lg shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+            {/* Modal Header */}
+            <div className={`sticky top-0 flex items-center justify-between p-4 border-b ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
+              style={{ zIndex: 10000 }}
+            >
+              <h3 className={`text-lg font-bold truncate flex-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                {selectedFile.type.startsWith('image/') ? '🖼️' : 
+                 selectedFile.type === 'application/pdf' || selectedFile.name?.endsWith('.pdf') ? '📄' : 
+                 selectedFile.type.includes('word') ? '📝' : 
+                 selectedFile.type === 'text/csv' ? '📊' : '📃'} {selectedFile.name}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowFileViewer(false)
+                  setSelectedFile(null)
+                  setPdfPage(1)
+                  setDocxHtml('') // Reset DOCX content
+                }}
+                className="ml-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-bold"
+              >
+                ✖️ Close
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              {/* PDF Viewer */}
+              {(selectedFile.type === 'application/pdf' || selectedFile.name?.endsWith('.pdf')) && (
+                <div className="space-y-4">
+                  <div className="flex justify-center bg-gray-100 dark:bg-gray-900 p-4 rounded-lg min-h-[500px] items-center">
+                    <canvas 
+                      id="pdf-canvas" 
+                      className={`border-2 max-w-full shadow-lg ${isDark ? 'border-gray-600 bg-white' : 'border-gray-300 bg-white'}`}
+                      style={{ minHeight: '400px' }}
+                    />
+                  </div>
+                  {pdfPages > 1 && (
+                    <div className="flex items-center justify-center gap-4">
+                      <button
+                        onClick={() => setPdfPage(p => Math.max(1, p - 1))}
+                        disabled={pdfPage <= 1}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-bold"
+                      >
+                        ⬅️ Previous
+                      </button>
+                      <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        Page {pdfPage} of {pdfPages}
+                      </span>
+                      <button
+                        onClick={() => setPdfPage(p => Math.min(pdfPages, p + 1))}
+                        disabled={pdfPage >= pdfPages}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-bold"
+                      >
+                        Next ➡️
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CSV Viewer */}
+              {selectedFile.type === 'text/csv' && (
+                <div className="overflow-x-auto">
+                  <table className={`w-full border-collapse ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+                    <tbody>
+                      {(() => {
+                        try {
+                          const csvText = atob(selectedFile.base64.split(',')[1])
+                          const rows = csvText.split('\n').filter(row => row.trim())
+                          return rows.map((row, i) => (
+                            <tr key={i} className={i === 0 ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}>
+                              {row.split(',').map((cell, j) => (
+                                <td 
+                                  key={j} 
+                                  className={`border px-4 py-2 ${isDark ? 'border-gray-600 text-white' : 'border-gray-300 text-gray-900'}`}
+                                >
+                                  {cell.trim()}
+                                </td>
+                              ))}
+                            </tr>
+                          ))
+                        } catch (e) {
+                          return (
+                            <tr>
+                              <td className={`p-4 text-center ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                ❌ Failed to parse CSV file
+                              </td>
+                            </tr>
+                          )
+                        }
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Text File Viewer */}
+              {selectedFile.type === 'text/plain' && (
+                <div className={`p-4 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                  <pre 
+                    className={`whitespace-pre-wrap font-mono text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}
+                  >
+                    {atob(selectedFile.base64.split(',')[1])}
+                  </pre>
+                </div>
+              )}
+
+              {/* Image Viewer */}
+              {selectedFile.type.startsWith('image/') && (
+                <div className="flex justify-center">
+                  <img 
+                    src={selectedFile.base64} 
+                    alt={selectedFile.name}
+                    className="max-w-full max-h-[60vh] object-contain rounded-lg"
+                  />
+                </div>
+              )}
+
+              {/* DOCX/Word Document Viewer */}
+              {(selectedFile.type.includes('word') || selectedFile.name.endsWith('.docx') || selectedFile.name.endsWith('.doc')) && (
+                <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <div className={`mb-4 pb-4 border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                    <h4 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      📝 Word Document Content
+                    </h4>
+                  </div>
+                  {docxHtml ? (
+                    <div 
+                      className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
+                      dangerouslySetInnerHTML={{ __html: docxHtml }}
+                      style={{
+                        padding: '1rem',
+                        borderRadius: '0.5rem',
+                        backgroundColor: isDark ? '#374151' : '#ffffff',
+                        color: isDark ? '#ffffff' : '#000000'
+                      }}
+                    />
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        ⏳ Loading document content...
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Unsupported File Type */}
+              {!['application/pdf', 'text/csv', 'text/plain'].includes(selectedFile.type) && 
+               !selectedFile.name?.endsWith('.pdf') &&
+               !selectedFile.name?.endsWith('.docx') &&
+               !selectedFile.name?.endsWith('.doc') &&
+               !selectedFile.type.startsWith('image/') && 
+               !selectedFile.type.includes('word') && (
+                <div className={`p-6 rounded-lg text-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                  <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    ❌ Unsupported File Type
+                  </p>
+                  <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    This file type cannot be previewed in the browser.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

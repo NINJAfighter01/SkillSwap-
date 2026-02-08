@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken')
+const { getFirebaseAdmin } = require('../config/firebaseAdmin')
 const User = require('../models/User')
 
 const generateToken = (user) => {
@@ -35,6 +36,7 @@ exports.register = async (req, res, next) => {
         name: user.name,
         email: user.email,
         tokens: user.tokens,
+        isTeacher: user.isTeacher,
       },
     })
   } catch (error) {
@@ -66,6 +68,7 @@ exports.login = async (req, res, next) => {
         name: user.name,
         email: user.email,
         tokens: user.tokens,
+        isTeacher: user.isTeacher,
       },
     })
   } catch (error) {
@@ -96,19 +99,38 @@ exports.logout = (req, res) => {
 exports.googleLogin = async (req, res, next) => {
   try {
     const { token } = req.body
-    // Verify Google token here
-    const { email, name, picture } = req.body // Decoded from token
+    const admin = getFirebaseAdmin()
+    const decoded = await admin.auth().verifyIdToken(token)
+    const email = decoded.email
+    const name = decoded.name || decoded.email?.split('@')[0] || 'User'
+    const picture = decoded.picture
+    const googleId = decoded.uid
 
-    let user = await User.findOne({ where: { googleId: token } })
+    if (!email) {
+      return res.status(400).json({ message: 'Google account email not available' })
+    }
+
+    let user = await User.findOne({ where: { googleId } })
+
+    if (!user) {
+      user = await User.findOne({ where: { email } })
+    }
 
     if (!user) {
       user = await User.create({
         name,
         email,
-        googleId: token,
+        googleId,
         profilePicture: picture,
         tokens: 100,
       })
+    } else {
+      const updates = {}
+      if (!user.googleId) updates.googleId = googleId
+      if (!user.profilePicture && picture) updates.profilePicture = picture
+      if (Object.keys(updates).length > 0) {
+        await user.update(updates)
+      }
     }
 
     const jwtToken = generateToken(user)
@@ -121,6 +143,7 @@ exports.googleLogin = async (req, res, next) => {
         name: user.name,
         email: user.email,
         tokens: user.tokens,
+        isTeacher: user.isTeacher,
       },
     })
   } catch (error) {

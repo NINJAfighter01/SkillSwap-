@@ -1,8 +1,11 @@
 require('dotenv').config()
 const express = require('express')
+const http = require('http')
+const { Server } = require('socket.io')
 const cors = require('cors')
 const sequelize = require('./config/database')
 const errorHandler = require('./middleware/errorHandler')
+const { socketHandler } = require('./websocket/socketHandler')
 
 // Import routes
 const authRoutes = require('./routes/authRoutes')
@@ -15,6 +18,8 @@ const contactRoutes = require('./routes/contactRoutes')
 const skillRoutes = require('./routes/skillRoutes')
 const sessionRoutes = require('./routes/sessionRoutes')
 const reviewRoutes = require('./routes/reviewRoutes')
+const videoRoutes = require('./routes/videoRoutes')
+const supportRoutes = require('./routes/supportRoutes')
 
 // Import models
 const User = require('./models/User')
@@ -24,6 +29,7 @@ const Subscription = require('./models/Subscription')
 const Payment = require('./models/Payment')
 const TokenHistory = require('./models/TokenHistory')
 const Progress = require('./models/Progress')
+const VideoProgress = require('./models/VideoProgress')
 const Feedback = require('./models/Feedback')
 const Contact = require('./models/Contact')
 const Skill = require('./models/Skill')
@@ -31,25 +37,44 @@ const UserSkill = require('./models/UserSkill')
 const Session = require('./models/Session')
 const Review = require('./models/Review')
 const Rating = require('./models/Rating')
+const Video = require('./models/Video')
+const Support = require('./models/Support')
+const SupportMessage = require('./models/SupportMessage')
 
 const app = express()
+const server = http.createServer(app)
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+})
+
+// Initialize WebSocket handler
+socketHandler(io)
+
+// Make io accessible to routes
+app.set('io', io)
 
 // Middleware
 app.use(cors())
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(express.json({ limit: '50mb' })) // Increased limit for file uploads
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 
 // Routes
-app.use('/auth', authRoutes)
-app.use('/lectures', lectureRoutes)
-app.use('/notes', notesRoutes)
-app.use('/payments', paymentRoutes)
-app.use('/users', userRoutes)
-app.use('/feedback', feedbackRoutes)
-app.use('/contact', contactRoutes)
+app.use('/api/auth', authRoutes)
+app.use('/api/lectures', lectureRoutes)
+app.use('/api/notes', notesRoutes)
+app.use('/api/payments', paymentRoutes)
+app.use('/api/users', userRoutes)
+app.use('/api/feedback', feedbackRoutes)
+app.use('/api/contact', contactRoutes)
 app.use('/api/skills', skillRoutes)
 app.use('/api/sessions', sessionRoutes)
 app.use('/api/reviews', reviewRoutes)
+app.use('/api/videos', videoRoutes)
+app.use('/api/support', supportRoutes)
 
 // Health check
 app.get('/health', (req, res) => {
@@ -89,14 +114,93 @@ const startServer = async () => {
     Lecture.hasMany(Progress, { foreignKey: 'lectureId' })
     Progress.belongsTo(Lecture, { foreignKey: 'lectureId' })
 
+    User.hasMany(VideoProgress, { foreignKey: 'userId' })
+    VideoProgress.belongsTo(User, { foreignKey: 'userId' })
+
+    Video.hasMany(VideoProgress, { foreignKey: 'videoId' })
+    VideoProgress.belongsTo(Video, { foreignKey: 'videoId' })
+
     User.hasMany(Feedback, { foreignKey: 'userId' })
     Feedback.belongsTo(User, { foreignKey: 'userId' })
+
+    User.hasMany(Video, { foreignKey: 'uploaderId', as: 'videos' })
+    Video.belongsTo(User, { foreignKey: 'uploaderId', as: 'uploader' })
+
+    // Support associations
+    User.hasMany(Support, { foreignKey: 'userId' })
+    Support.belongsTo(User, { foreignKey: 'userId' })
+
+    Support.hasMany(SupportMessage, { foreignKey: 'supportId' })
+    SupportMessage.belongsTo(Support, { foreignKey: 'supportId' })
+
+    User.hasMany(SupportMessage, { foreignKey: 'senderId' })
+    SupportMessage.belongsTo(User, { foreignKey: 'senderId' })
 
     // Disable foreign keys for sync
     await sequelize.query('PRAGMA foreign_keys = OFF')
     
-    // Sync database
-    await sequelize.sync({ force: true })
+    // Sync database (creates tables if they don't exist, doesn't alter existing ones)
+    await sequelize.sync()
+
+    // Migrate Notes table to support topic-based notes
+    const migrateNotesTable = async () => {
+      const [columns] = await sequelize.query("PRAGMA table_info('Notes')")
+      if (!columns || columns.length === 0) return
+
+      const hasTopicName = columns.some((col) => col.name === 'topicName')
+      const lectureColumn = columns.find((col) => col.name === 'lectureId')
+      const lectureNotNull = lectureColumn ? lectureColumn.notnull === 1 : false
+
+      if (!hasTopicName && !lectureNotNull) {
+        await sequelize.query('ALTER TABLE Notes ADD COLUMN topicName TEXT')
+        return
+      }
+
+      if (!lectureNotNull && hasTopicName) return
+
+      await sequelize.query('CREATE TABLE IF NOT EXISTS Notes_new (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, topicName TEXT, lectureId INTEGER, userId INTEGER NOT NULL, files TEXT, createdAt DATETIME, updatedAt DATETIME, FOREIGN KEY(lectureId) REFERENCES Lectures(id), FOREIGN KEY(userId) REFERENCES Users(id))')
+      if (hasTopicName) {
+        await sequelize.query('INSERT INTO Notes_new (id, content, topicName, lectureId, userId, files, createdAt, updatedAt) SELECT id, content, topicName, lectureId, userId, files, createdAt, updatedAt FROM Notes')
+      } else {
+        await sequelize.query('INSERT INTO Notes_new (id, content, topicName, lectureId, userId, files, createdAt, updatedAt) SELECT id, content, NULL as topicName, lectureId, userId, files, createdAt, updatedAt FROM Notes')
+      }
+      await sequelize.query('DROP TABLE Notes')
+      await sequelize.query('ALTER TABLE Notes_new RENAME TO Notes')
+    }
+
+    await migrateNotesTable()
+    
+    // Migrate Feedback table to support new professional feedback fields
+    const migrateFeedbackTable = async () => {
+      const [columns] = await sequelize.query("PRAGMA table_info('Feedbacks')")
+      if (!columns || columns.length === 0) return
+
+      const hasCategory = columns.some((col) => col.name === 'category')
+      const hasSubject = columns.some((col) => col.name === 'subject')
+      const hasStatus = columns.some((col) => col.name === 'status')
+      const hasEmail = columns.some((col) => col.name === 'email')
+
+      if (hasCategory && hasSubject && hasStatus && hasEmail) return
+
+      console.log('Migrating Feedback table...')
+      await sequelize.query('CREATE TABLE IF NOT EXISTS Feedbacks_new (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, category TEXT DEFAULT "general", subject TEXT NOT NULL, rating INTEGER NOT NULL, message TEXT NOT NULL, status TEXT DEFAULT "pending", email TEXT, createdAt DATETIME, updatedAt DATETIME, FOREIGN KEY(userId) REFERENCES Users(id))')
+      
+      if (hasCategory && hasSubject && hasStatus && hasEmail) {
+        await sequelize.query('INSERT INTO Feedbacks_new SELECT * FROM Feedbacks')
+      } else if (hasCategory && hasSubject) {
+        await sequelize.query('INSERT INTO Feedbacks_new (id, userId, category, subject, rating, message, status, email, createdAt, updatedAt) SELECT id, userId, category, subject, rating, message, "pending" as status, NULL as email, createdAt, updatedAt FROM Feedbacks')
+      } else if (hasSubject) {
+        await sequelize.query('INSERT INTO Feedbacks_new (id, userId, category, subject, rating, message, status, email, createdAt, updatedAt) SELECT id, userId, "general" as category, subject, rating, message, "pending" as status, NULL as email, createdAt, updatedAt FROM Feedbacks')
+      } else {
+        await sequelize.query('INSERT INTO Feedbacks_new (id, userId, category, subject, rating, message, status, email, createdAt, updatedAt) SELECT id, userId, "general" as category, "Feedback" as subject, rating, message, "pending" as status, NULL as email, createdAt, updatedAt FROM Feedbacks')
+      }
+      
+      await sequelize.query('DROP TABLE Feedbacks')
+      await sequelize.query('ALTER TABLE Feedbacks_new RENAME TO Feedbacks')
+      console.log('Feedback table migrated successfully')
+    }
+
+    await migrateFeedbackTable()
     
     // Enable foreign keys
     await sequelize.query('PRAGMA foreign_keys = ON')
@@ -165,7 +269,7 @@ const startServer = async () => {
           fullDescription: 'Master SQL and database optimization with proper indexing and query performance tuning',
           tokens: 12,
           category: 'Databases',
-          duration: 75,
+          duration: 60,
           teacherId: teacherId,
           isPremium: false,
           isLive: false,
@@ -176,8 +280,9 @@ const startServer = async () => {
       console.log('Sample lectures created')
     }
 
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`✓ Server running on http://localhost:${PORT}`)
+      console.log(`✓ WebSocket server ready`)
     })
   } catch (error) {
     console.error('Error starting server:', error)

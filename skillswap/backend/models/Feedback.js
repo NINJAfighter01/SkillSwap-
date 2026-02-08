@@ -17,6 +17,15 @@ const Feedback = sequelize.define(
         key: 'id',
       },
     },
+    category: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'general',
+    },
+    subject: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
     rating: {
       type: DataTypes.INTEGER,
       min: 1,
@@ -26,6 +35,15 @@ const Feedback = sequelize.define(
     message: {
       type: DataTypes.TEXT,
       allowNull: false,
+    },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'pending',
+    },
+    email: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
   },
   {

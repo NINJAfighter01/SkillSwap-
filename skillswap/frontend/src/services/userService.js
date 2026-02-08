@@ -20,6 +20,18 @@ const userService = {
 
   updatePortfolio: (portfolioData) =>
     axios.put(`${API_URL}/users/portfolio`, portfolioData),
+
+  followUser: (targetUserId) =>
+    axios.post(`${API_URL}/users/follow`, { targetUserId }),
+
+  unfollowUser: (targetUserId) =>
+    axios.post(`${API_URL}/users/unfollow`, { targetUserId }),
+
+  followUser: (targetUserId) =>
+    axios.post(`${API_URL}/users/follow`, { targetUserId }),
+
+  unfollowUser: (targetUserId) =>
+    axios.post(`${API_URL}/users/unfollow`, { targetUserId }),
 }
 
 export default userService

@@ -1,9 +1,10 @@
-import React, { useContext, useState, useEffect } from 'react'
+import React, { useContext, useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { ThemeContext } from '../context/ThemeContext'
 import NotesEditor from '../components/NotesEditor'
 import lectureService from '../services/lectureService'
 import notesService from '../services/notesService'
+import userService from '../services/userService'
 
 const LecturePlayer = () => {
   const { isDark } = useContext(ThemeContext)
@@ -11,10 +12,18 @@ const LecturePlayer = () => {
   const [lecture, setLecture] = useState(null)
   const [existingNote, setExistingNote] = useState(null)
   const [loading, setLoading] = useState(true)
+  const videoRef = useRef(null)
+  const lastProgressSentRef = useRef(0)
+  const lastPercentSentRef = useRef(0)
 
   useEffect(() => {
     fetchLecture()
     fetchNotes()
+  }, [id])
+
+  useEffect(() => {
+    lastProgressSentRef.current = 0
+    lastPercentSentRef.current = 0
   }, [id])
 
   const fetchLecture = async () => {
@@ -39,6 +48,32 @@ const LecturePlayer = () => {
     }
   }
 
+  const handleTimeUpdate = async () => {
+    const videoEl = videoRef.current
+    if (!videoEl || !lecture) return
+    if (!videoEl.duration || Number.isNaN(videoEl.duration)) return
+
+    const percent = Math.min(100, Math.round((videoEl.currentTime / videoEl.duration) * 100))
+    const now = Date.now()
+
+    if (percent < 1) return
+    if (percent !== 100 && now - lastProgressSentRef.current < 5000 && Math.abs(percent - lastPercentSentRef.current) < 2) {
+      return
+    }
+
+    lastProgressSentRef.current = now
+    lastPercentSentRef.current = percent
+
+    try {
+      await userService.updateProgress({
+        lectureId: id,
+        completionPercentage: percent,
+      })
+    } catch (error) {
+      console.error('Error updating lecture progress:', error)
+    }
+  }
+
   if (loading) return <div>Loading...</div>
   if (!lecture) return <div>Lecture not found</div>
 
@@ -54,6 +89,8 @@ const LecturePlayer = () => {
                   <video
                     src={lecture.videoUrl}
                     controls
+                    ref={videoRef}
+                    onTimeUpdate={handleTimeUpdate}
                     className="w-full h-full"
                   />
                 ) : (

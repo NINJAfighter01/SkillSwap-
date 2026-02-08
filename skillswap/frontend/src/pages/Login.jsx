@@ -5,11 +5,12 @@ import { ThemeContext } from '../context/ThemeContext'
 
 const Login = () => {
   const { isDark } = useContext(ThemeContext)
-  const { login } = useContext(AuthContext)
+  const { login, googleLogin } = useContext(AuthContext)
   const navigate = useNavigate()
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -25,6 +26,18 @@ const Login = () => {
       setError(err.message || 'Login failed')
     }
     setIsLoading(false)
+  }
+
+  const handleGoogleLogin = async () => {
+    setError('')
+    setIsGoogleLoading(true)
+    try {
+      await googleLogin()
+      navigate('/')
+    } catch (err) {
+      setError(err.message || 'Google login failed')
+    }
+    setIsGoogleLoading(false)
   }
 
   return (
@@ -77,8 +90,13 @@ const Login = () => {
         </form>
 
         <div className="mt-6 space-y-3">
-          <button className="w-full bg-white text-gray-800 py-2 rounded-lg border-2 border-gray-300 font-semibold hover:bg-gray-50">
-            Google Login
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={isGoogleLoading}
+            className="w-full bg-white text-gray-800 py-2 rounded-lg border-2 border-gray-300 font-semibold hover:bg-gray-50 disabled:opacity-50"
+          >
+            {isGoogleLoading ? 'Connecting to Google...' : 'Google Login'}
           </button>
         </div>
 

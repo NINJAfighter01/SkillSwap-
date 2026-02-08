@@ -2,7 +2,9 @@ import React, { useContext } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, AuthContext } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { WebSocketProvider } from './context/WebSocketContext'
 import Navbar from './components/Navbar'
+import SupportWidget from './components/SupportWidget'
 
 import HomePage from './pages/HomePage'
 import Login from './pages/Login'
@@ -12,6 +14,8 @@ import Lectures from './pages/Lectures'
 import LectureStreaming from './pages/LectureStreaming'
 import InteractiveNotes from './pages/InteractiveNotes'
 import LecturePlayer from './pages/LecturePlayer'
+import CourseListing from './pages/CourseListing'
+import CoursePage from './pages/CoursePage'
 import Subscription from './pages/Subscription'
 import Contact from './pages/Contact'
 import About from './pages/About'
@@ -22,12 +26,16 @@ import Info from './pages/Info'
 import Feedback from './pages/Feedback'
 import Profile from './pages/Profile'
 import ProgressPage from './pages/ProgressPage'
+import TokenHistoryPage from './pages/TokenHistoryPage'
+import Support247 from './pages/Support247'
 import LearnAnything from './pages/LearnAnything'
 import SkillDetail from './pages/SkillDetail'
 import MySessions from './pages/MySessions'
 import BecomeaMentor from './pages/BecomeaMentor'
 import MentorProfile from './pages/MentorProfile'
-import TopMentors from './pages/TopMentors'
+import VideoUpload from './pages/VideoUpload'
+import VideoList from './pages/VideoList'
+import VideoPlayer from './pages/VideoPlayer'
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useContext(AuthContext)
@@ -42,6 +50,7 @@ const AppRoutes = () => {
   return (
     <>
       {isAuthenticated && <Navbar />}
+      {isAuthenticated && <SupportWidget />}
       <Routes>
         {/* Public Routes - Only accessible before login */}
         <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
@@ -105,6 +114,22 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <Subscription />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/courses"
+          element={
+            <ProtectedRoute>
+              <CourseListing />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/course/:id"
+          element={
+            <ProtectedRoute>
+              <CoursePage />
             </ProtectedRoute>
           }
         />
@@ -180,6 +205,22 @@ const AppRoutes = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/token-history"
+          element={
+            <ProtectedRoute>
+              <TokenHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support"
+          element={
+            <ProtectedRoute>
+              <Support247 />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Peer-to-Peer Learning Routes */}
         <Route
@@ -222,11 +263,29 @@ const AppRoutes = () => {
             </ProtectedRoute>
           }
         />
+
+        {/* Video Routes */}
         <Route
-          path="/top-mentors"
+          path="/videos"
           element={
             <ProtectedRoute>
-              <TopMentors />
+              <VideoList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/videos/:id"
+          element={
+            <ProtectedRoute>
+              <VideoPlayer />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/upload-video"
+          element={
+            <ProtectedRoute>
+              <VideoUpload />
             </ProtectedRoute>
           }
         />
@@ -242,9 +301,11 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
+        <WebSocketProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </WebSocketProvider>
       </AuthProvider>
     </ThemeProvider>
   )

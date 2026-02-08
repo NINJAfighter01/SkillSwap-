@@ -21,7 +21,7 @@ const HomePage = () => {
             <div className="bg-white/20 backdrop-blur-md p-12 md:p-16 lg:p-20 text-white border-b-2 border-t-2 border-white/40 shadow-2xl">
               <div className="px-4 md:px-8 lg:px-12 max-w-6xl mx-auto">
                 <h2 className="text-4xl md:text-5xl font-extrabold mb-10 text-center">About SkillSwap Platform</h2>
-                
+
                 <p className="mb-10 leading-loose text-xl md:text-2xl font-medium">
                   <strong className="font-bold">SkillSwap – Peer to Peer Learning Platform</strong> is a digital learning and educational management platform designed to facilitate peer-to-peer knowledge sharing and skill development. SkillSwap functions as a centralized online system that enables registered users to efficiently access, deliver, and manage educational content, including online and pre-recorded lectures, learning tasks, and progress tracking.
                 </p>
@@ -61,24 +61,14 @@ const HomePage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
             {
-              icon: '📚',
-              title: 'Learn Anything',
-              desc: 'Access thousands of skill-based lectures from experts'
-            },
-            {
-              icon: '▶️',
-              title: 'Lecture Streaming',
-              desc: 'High-quality video streaming of recorded lectures with adjustable playback speed'
+              icon: '🧭',
+              title: 'Explore Courses',
+              desc: 'Browse curated courses across web, data, design, and more'
             },
             {
               icon: '💰',
               title: 'Earn Tokens',
               desc: 'Teach your skills and earn tokens for learning new ones'
-            },
-            {
-              icon: '🎓',
-              title: 'Expert Teachers',
-              desc: 'Learn from industry professionals and experienced instructors'
             },
             {
               icon: '📊',
@@ -109,20 +99,32 @@ const HomePage = () => {
             <div
               key={idx}
               onClick={() => {
-                if (feature.title === 'Lecture Streaming') {
-                  navigate('/lectures')
+                if (feature.title === 'Explore Courses') {
+                  navigate('/courses')
                 }
                 if (feature.title === 'Interactive Notes') {
                   navigate('/interactive-notes')
                 }
+                if (feature.title === 'Track Progress') {
+                  navigate('/progress')
+                }
+                if (feature.title === 'Earn Tokens') {
+                  navigate('/token-history')
+                }
                 if (feature.title === 'Share Feedback') {
                   navigate('/feedback')
+                }
+                if (feature.title === '24/7 Support') {
+                  navigate('/support')
+                }
+                if (feature.title === 'Premium Content') {
+                  navigate('/videos?filter=tokens')
                 }
               }}
               className={`rounded-lg p-8 text-center ${
                 isDark ? 'bg-gray-800' : 'bg-white'
               } shadow-lg ${
-                (feature.title === 'Lecture Streaming' || feature.title === 'Interactive Notes' || feature.title === 'Share Feedback') 
+                (feature.title === 'Explore Courses' || feature.title === 'Interactive Notes' || feature.title === 'Track Progress' || feature.title === 'Earn Tokens' || feature.title === 'Share Feedback' || feature.title === '24/7 Support') 
                   ? 'cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-300' 
                   : ''
               }`}
