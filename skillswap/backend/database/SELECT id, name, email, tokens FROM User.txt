@@ -1,0 +1,1 @@
+SELECT id, name, email, tokens FROM Users WHERE email = 'user@gmail.com';
