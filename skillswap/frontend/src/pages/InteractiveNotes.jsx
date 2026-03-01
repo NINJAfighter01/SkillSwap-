@@ -7,6 +7,7 @@ import ReactQuill from 'react-quill'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import mammoth from 'mammoth'
+import html2pdf from 'html2pdf.js'
 import 'react-quill/dist/quill.snow.css'
 import '../styles/quill-custom.css'
 
@@ -27,6 +28,9 @@ const InteractiveNotes = () => {
   const [editingContent, setEditingContent] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [viewedNoteIds, setViewedNoteIds] = useState(new Set())
+  const [tagInput, setTagInput] = useState('')
+  const [folderInput, setFolderInput] = useState('General')
+  const [folderFilter, setFolderFilter] = useState('All')
   const [uploadedFiles, setUploadedFiles] = useState({}) // Files for each note: {noteId: [files]}
   const [currentFiles, setCurrentFiles] = useState([]) // Files for note being created/edited
   const [showFileViewer, setShowFileViewer] = useState(false)
@@ -106,6 +110,15 @@ const InteractiveNotes = () => {
     if (diffHours < 24) return `${diffHours}h ago`
     if (diffDays < 7) return `${diffDays}d ago`
     return noteDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  }
+
+  const parseTagInput = (value) => {
+    if (!value || !value.trim()) return []
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item, index, arr) => item && arr.indexOf(item) === index)
+      .slice(0, 10)
   }
 
   // File handling functions
@@ -443,6 +456,89 @@ const InteractiveNotes = () => {
     document.body.removeChild(element)
   }
 
+  const handleExportDoc = (note) => {
+    const docContent = `
+<html>
+  <head><meta charset="UTF-8"><title>${note.topicName || note.Lecture?.title || 'Note'}</title></head>
+  <body>
+    <h1>${note.topicName || note.Lecture?.title || 'Note'}</h1>
+    <p><strong>Folder:</strong> ${note.folder || 'General'}</p>
+    <p><strong>Tags:</strong> ${(note.tags || []).join(', ') || 'None'}</p>
+    <hr/>
+    ${note.content}
+  </body>
+</html>`
+    const blob = new Blob([docContent], { type: 'application/msword' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${note.topicName || note.Lecture?.title || 'note'}.doc`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportPdf = (note) => {
+    const wrapper = document.createElement('div')
+    wrapper.innerHTML = `
+      <div style="font-family: Arial, sans-serif; padding: 16px; color: #111827;">
+        <h2>${note.topicName || note.Lecture?.title || 'Note'}</h2>
+        <p><strong>Folder:</strong> ${note.folder || 'General'}</p>
+        <p><strong>Tags:</strong> ${(note.tags || []).join(', ') || 'None'}</p>
+        <hr/>
+        <div>${note.content}</div>
+      </div>
+    `
+
+    html2pdf()
+      .set({
+        margin: 10,
+        filename: `${note.topicName || note.Lecture?.title || 'note'}.pdf`,
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      })
+      .from(wrapper)
+      .save()
+  }
+
+  const handleTogglePin = async (note) => {
+    const updatedNotes = notes.map((n) =>
+      n.id === note.id ? { ...n, isPinned: !n.isPinned } : n
+    )
+    setNotes(updatedNotes)
+    localStorage.setItem('interactiveNotes', JSON.stringify(updatedNotes))
+
+    try {
+      await notesService.updateNote(note.id, { isPinned: !note.isPinned })
+    } catch (error) {
+      console.error('Error updating pin status:', error)
+    }
+  }
+
+  const handleShareNote = async (note) => {
+    const shareUrl = `${window.location.origin}/interactive-notes?note=${note.id}`
+    const shareText = `${note.topicName || note.Lecture?.title || 'Note'}\n${shareUrl}`
+
+    try {
+      await navigator.clipboard.writeText(shareText)
+
+      const updatedNotes = notes.map((n) =>
+        n.id === note.id ? { ...n, isShared: true } : n
+      )
+      setNotes(updatedNotes)
+      localStorage.setItem('interactiveNotes', JSON.stringify(updatedNotes))
+
+      try {
+        await notesService.updateNote(note.id, { isShared: true })
+      } catch (error) {
+        console.error('Error updating shared status:', error)
+      }
+
+      alert('🔗 Note link copied to clipboard!')
+    } catch (error) {
+      alert('Unable to copy link. Please copy manually.')
+    }
+  }
+
   const handleAddNote = async () => {
     const plainText = newNoteContent.replace(/<[^>]*>/g, '').trim()
     if (!plainText || !topicName.trim()) {
@@ -454,6 +550,8 @@ const InteractiveNotes = () => {
     console.log('📊 Files count:', currentFiles.length)
     
     setIsSaving(true)
+    const parsedTags = parseTagInput(tagInput)
+    const normalizedFolder = folderInput?.trim() || 'General'
     
     // Create local note object
     const localNote = {
@@ -462,6 +560,10 @@ const InteractiveNotes = () => {
       lectureId: null,
       content: newNoteContent,
       files: currentFiles, // Include uploaded files
+      tags: parsedTags,
+      folder: normalizedFolder,
+      isPinned: false,
+      isShared: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastStudied: new Date().toISOString(),
@@ -481,7 +583,11 @@ const InteractiveNotes = () => {
       const response = await notesService.createNote({
         topicName: topicName.trim(),
         content: newNoteContent,
-        files: currentFiles
+        files: currentFiles,
+        tags: parsedTags,
+        folder: normalizedFolder,
+        isPinned: false,
+        isShared: false,
       })
       console.log('✅ Note saved to backend:', response.data.note)
       // Replace local note with backend note
@@ -490,6 +596,8 @@ const InteractiveNotes = () => {
       setNewNoteContent('')
       setTopicName('')
       setCurrentFiles([]) // Reset files
+      setTagInput('')
+      setFolderInput('General')
       setShowAddForm(false)
       alert('✅ Note added successfully!')
     } catch (error) {
@@ -497,6 +605,8 @@ const InteractiveNotes = () => {
       setNewNoteContent('')
       setTopicName('')
       setCurrentFiles([]) // Reset files
+      setTagInput('')
+      setFolderInput('General')
       setShowAddForm(false)
       alert('✅ Note saved locally (backend offline)')
     }
@@ -549,13 +659,28 @@ const InteractiveNotes = () => {
     setEditingContent('')
   }
 
-  const filteredNotes = notes.filter(note =>
-    note.content?.toLowerCase().includes(filter.toLowerCase()) ||
-    note.topicName?.toLowerCase().includes(filter.toLowerCase()) ||
-    note.Lecture?.title?.toLowerCase().includes(filter.toLowerCase()) ||
-    note.Lecture?.category?.toLowerCase().includes(filter.toLowerCase()) ||
-    note.Lecture?.teacherName?.toLowerCase().includes(filter.toLowerCase())
-  )
+  const folders = ['All', ...Array.from(new Set(notes.map((note) => note.folder || 'General')))]
+
+  const filteredNotes = notes
+    .filter((note) => {
+      const search = filter.toLowerCase()
+      const matchesSearch =
+        note.content?.toLowerCase().includes(search) ||
+        note.topicName?.toLowerCase().includes(search) ||
+        note.Lecture?.title?.toLowerCase().includes(search) ||
+        note.Lecture?.category?.toLowerCase().includes(search) ||
+        note.Lecture?.teacherName?.toLowerCase().includes(search) ||
+        (note.tags || []).some((tag) => tag.toLowerCase().includes(search))
+
+      const matchesFolder = folderFilter === 'All' || (note.folder || 'General') === folderFilter
+      return matchesSearch && matchesFolder
+    })
+    .sort((a, b) => {
+      if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+        return a.isPinned ? -1 : 1
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    })
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} py-8`}>
@@ -631,6 +756,40 @@ const InteractiveNotes = () => {
                       : 'bg-white border-gray-300 text-black'
                   } focus:outline-none focus:border-purple-500`}
                 />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={`block text-sm font-bold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Folder:
+                  </label>
+                  <input
+                    type="text"
+                    value={folderInput}
+                    onChange={(e) => setFolderInput(e.target.value)}
+                    placeholder="e.g., React, SQL, Interview"
+                    className={`w-full p-3 rounded-lg border-2 ${
+                      isDark
+                        ? 'bg-gray-700 border-gray-600 text-white'
+                        : 'bg-white border-gray-300 text-black'
+                    } focus:outline-none focus:border-purple-500`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-bold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Tags (comma separated):
+                  </label>
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    placeholder="react, hooks, interview"
+                    className={`w-full p-3 rounded-lg border-2 ${
+                      isDark
+                        ? 'bg-gray-700 border-gray-600 text-white'
+                        : 'bg-white border-gray-300 text-black'
+                    } focus:outline-none focus:border-purple-500`}
+                  />
+                </div>
               </div>
               <div>
                 <label className={`block text-sm font-bold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -740,6 +899,8 @@ const InteractiveNotes = () => {
                     setShowAddForm(false)
                     setNewNoteContent('')
                     setTopicName('')
+                    setTagInput('')
+                    setFolderInput('General')
                   }}
                   className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition font-bold"
                 >
@@ -763,18 +924,31 @@ const InteractiveNotes = () => {
         )}
 
         {/* Search Bar */}
-        <div className="mb-8">
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-3">
           <input
             type="text"
-            placeholder="Search notes by session, skill, mentor, or content..."
+            placeholder="Search notes by topic, tags, session, mentor..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className={`w-full p-4 rounded-lg border-2 ${
+            className={`md:col-span-2 w-full p-4 rounded-lg border-2 ${
               isDark
                 ? 'bg-gray-800 border-gray-700 text-white'
                 : 'bg-white border-gray-300 text-black'
             } focus:outline-none focus:border-purple-500`}
           />
+          <select
+            value={folderFilter}
+            onChange={(e) => setFolderFilter(e.target.value)}
+            className={`w-full p-4 rounded-lg border-2 ${
+              isDark
+                ? 'bg-gray-800 border-gray-700 text-white'
+                : 'bg-white border-gray-300 text-black'
+            } focus:outline-none focus:border-purple-500`}
+          >
+            {folders.map((folder) => (
+              <option key={folder} value={folder}>{folder}</option>
+            ))}
+          </select>
         </div>
 
         {/* Notes List */}
@@ -964,9 +1138,25 @@ const InteractiveNotes = () => {
                           >
                             📝 {note.topicName || note.Lecture?.title || 'Untitled Note'}
                           </h3>
+                          {note.isPinned && (
+                            <span className="px-2 py-1 bg-amber-500 text-white text-xs font-bold rounded">📌 Pinned</span>
+                          )}
+                          {note.isShared && (
+                            <span className="px-2 py-1 bg-cyan-600 text-white text-xs font-bold rounded">🔗 Shared</span>
+                          )}
                           {note.Lecture?.isPremium && (
                             <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-bold rounded">⭐ Premium</span>
                           )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-purple-700 text-purple-100' : 'bg-purple-100 text-purple-700'}`}>
+                            📂 {note.folder || 'General'}
+                          </span>
+                          {(note.tags || []).map((tag) => (
+                            <span key={tag} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
+                              #{tag}
+                            </span>
+                          ))}
                         </div>
                         {note.Lecture ? (
                           <div className={`flex items-center gap-4 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
@@ -1115,7 +1305,19 @@ const InteractiveNotes = () => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={() => handleTogglePin(note)}
+                        className={`px-4 py-2 rounded-lg transition font-bold ${note.isPinned ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-amber-500 text-white hover:bg-amber-600'}`}
+                      >
+                        {note.isPinned ? '📌 Unpin' : '📌 Pin'}
+                      </button>
+                      <button
+                        onClick={() => handleShareNote(note)}
+                        className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition font-bold"
+                      >
+                        🔗 Share
+                      </button>
                       <button
                         onClick={() => {
                           setEditingNoteId(note.id)
@@ -1125,17 +1327,31 @@ const InteractiveNotes = () => {
                       >
                         ✏️ Edit
                       </button>
-                      <button
-                        onClick={() => navigate(`/lecture/${note.Lecture?.id}`)}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-bold"
-                      >
-                        📺 View Lecture
-                      </button>
+                      {note.Lecture?.id && (
+                        <button
+                          onClick={() => navigate(`/lecture/${note.Lecture?.id}`)}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-bold"
+                        >
+                          📺 View Lecture
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDownloadNote(note)}
                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-bold"
                       >
-                        💾 Download
+                        💾 HTML
+                      </button>
+                      <button
+                        onClick={() => handleExportDoc(note)}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition font-bold"
+                      >
+                        🧾 DOC
+                      </button>
+                      <button
+                        onClick={() => handleExportPdf(note)}
+                        className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-bold"
+                      >
+                        📄 PDF
                       </button>
                       <button
                         onClick={() => handleDelete(note.id)}

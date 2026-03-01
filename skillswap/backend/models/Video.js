@@ -29,6 +29,36 @@ const Video = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    category: {
+      type: DataTypes.STRING,
+      defaultValue: 'Programming',
+      validate: {
+        isIn: [['Programming', 'Design', 'Music', 'Electronics', 'Communication', 'Business', 'Education', 'Healthcare', 'Sports', 'Other']]
+      }
+    },
+    skillType: {
+      type: DataTypes.STRING,
+      defaultValue: 'Offer',
+      validate: {
+        isIn: [['Offer', 'Request']]
+      }
+    },
+    location: {
+      type: DataTypes.STRING,
+      defaultValue: 'Online',
+    },
+    tags: {
+      type: DataTypes.JSON,
+      defaultValue: [],
+    },
+    allowComments: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    wantSkillInReturn: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
     level: {
       type: DataTypes.STRING,
       defaultValue: 'Beginner',

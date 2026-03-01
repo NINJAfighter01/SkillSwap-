@@ -28,11 +28,12 @@ exports.updateProfile = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' })
     }
 
-    const { name, bio, isTeacher, skills, projects, socialLinks, aiInsights } = req.body
+    const { name, bio, location, isTeacher, skills, projects, socialLinks, aiInsights } = req.body
 
     const updateData = {
       name: name || user.name,
       bio: bio || user.bio,
+      location: location !== undefined ? location : user.location,
       isTeacher: isTeacher !== undefined ? isTeacher : user.isTeacher,
     }
 
@@ -50,6 +51,7 @@ exports.updateProfile = async (req, res, next) => {
         name: user.name,
         email: user.email,
         bio: user.bio,
+        location: user.location,
         isTeacher: user.isTeacher,
         skills: user.skills,
         projects: user.projects,

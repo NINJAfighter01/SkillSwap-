@@ -1,4 +1,5 @@
 import React, { useContext, useState, useRef, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../context/AuthContext'
 import { ThemeContext } from '../context/ThemeContext'
@@ -34,10 +35,16 @@ const Navbar = () => {
     { label: 'Home', path: '/' },
     { label: 'Videos', path: '/videos' },
     { label: 'Contact', path: '/contact' },
+    { label: 'Invite', path: '/invite' },
   ]
 
   return (
-    <nav className={`${isDark ? 'dark bg-gray-900' : 'bg-white'} shadow-lg sticky top-0 z-50`}>
+    <motion.nav
+      initial={{ y: -60, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.6, ease: 'easeOut' }}
+      className={`${isDark ? 'dark bg-gray-900' : 'bg-white'} shadow-lg sticky top-0 z-50`}
+    >
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
@@ -55,7 +62,11 @@ const Navbar = () => {
                 key={item.path}
                 to={item.path}
                 className={`text-sm font-medium transition ${
-                  isDark ? 'text-gray-300 hover:text-white' : 'text-gray-700 hover:text-blue-600'
+                  item.label === 'Invite'
+                    ? 'px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 text-white hover:opacity-90'
+                    : isDark
+                      ? 'text-gray-300 hover:text-white'
+                      : 'text-gray-700 hover:text-blue-600'
                 }`}
               >
                 {item.label}
@@ -218,6 +229,19 @@ const Navbar = () => {
                           <span className="font-semibold">Dashboard</span>
                         </Link>
 
+                        {user?.role === 'admin' && (
+                          <Link
+                            to="/admin/videos"
+                            onClick={() => setShowProfileMenu(false)}
+                            className={`flex items-center gap-3 px-4 py-3 transition ${
+                              isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+                            }`}
+                          >
+                            <span className="text-2xl">🛠️</span>
+                            <span className="font-semibold">Admin Video Panel</span>
+                          </Link>
+                        )}
+
                         <Link
                           to="/courses"
                           onClick={() => setShowProfileMenu(false)}
@@ -321,7 +345,7 @@ const Navbar = () => {
           </div>
         </div>
       </div>
-    </nav>
+    </motion.nav>
   )
 }
 

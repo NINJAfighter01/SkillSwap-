@@ -35,7 +35,7 @@ const CoursePage = () => {
       tokens: 10,
       category: 'Web Development',
       duration: 45,
-      videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4', // Sample video
+      videoUrl: '/video/white-toyota-drifting.3840x2160.mp4',
       courseNotes: `
         <h2>Course Overview</h2>
         <p>Welcome to React Mastery! This comprehensive course will teach you:</p>
@@ -58,6 +58,39 @@ const CoursePage = () => {
         </ul>
       `
     },
+    2: {
+      id: 2,
+      title: 'JavaScript Advanced 2',
+      description: 'Learn to build scalable applications with modern JavaScript patterns and best practices.',
+      instructor: 'Sample Teacher',
+      tokens: 15,
+      category: 'Programming',
+      duration: 45,
+      videoUrl: '/video/eclipse-over-silent-falls.3840x2160.mp4',
+      courseNotes: '<p>Advanced JavaScript notes will be available here.</p>',
+    },
+    3: {
+      id: 3,
+      title: 'Web Development Pro 3',
+      description: 'Learn to build scalable applications with modern web development patterns and best practices.',
+      instructor: 'Sample Teacher',
+      tokens: 20,
+      category: 'Web Development',
+      duration: 45,
+      videoUrl: '/video/neon-skyline.3840x2160.mp4',
+      courseNotes: '<p>Web Development Pro notes will be available here.</p>',
+    },
+    4: {
+      id: 4,
+      title: 'Node.js & Express 4',
+      description: 'Learn to build scalable backend applications with Node.js and Express.',
+      instructor: 'Sample Teacher',
+      tokens: 25,
+      category: 'Backend',
+      duration: 45,
+      videoUrl: '/video/miles-morales-in-multiverse.3840x2160.mp4',
+      courseNotes: '<p>Node.js & Express notes will be available here.</p>',
+    },
     // Add more courses as needed
   }
 
@@ -79,7 +112,7 @@ const CoursePage = () => {
         tokens: 10 + (parseInt(id) % 5) * 5,
         category: 'Programming',
         duration: 45,
-        videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+        videoUrl: '/video/motivational-quote.3840x2160.mp4',
         courseNotes: '<p>Course notes for this lecture will be available soon.</p>'
       }
       setCourse(courseData)

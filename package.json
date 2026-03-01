@@ -1,5 +1,11 @@
 {
+  "scripts": {
+    "start": "cd skillswap/backend && npm start",
+    "backend": "cd skillswap/backend && npm start",
+    "frontend": "cd skillswap/frontend && npm run dev"
+  },
   "dependencies": {
-    "cloudinary": "^2.9.0"
+    "cloudinary": "^2.9.0",
+    "framer-motion": "^12.34.3"
   }
 }

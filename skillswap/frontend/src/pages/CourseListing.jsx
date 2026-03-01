@@ -1,14 +1,17 @@
 import React, { useContext, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ThemeContext } from '../context/ThemeContext'
+import { AuthContext } from '../context/AuthContext'
 import videoService from '../services/videoService'
 
 const CourseListing = () => {
   const { isDark } = useContext(ThemeContext)
+  const { user } = useContext(AuthContext)
   const navigate = useNavigate()
   const [currentPage, setCurrentPage] = useState(1)
   const [videos, setVideos] = useState([])
   const [loadingVideos, setLoadingVideos] = useState(true)
+  const canManageVideos = user?.role === 'admin' || user?.role === 'developer'
 
   useEffect(() => {
     const loadVideos = async () => {
@@ -177,12 +180,22 @@ const CourseListing = () => {
             <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               🎥 Community Videos
             </h2>
-            <button
-              onClick={() => navigate('/videos')}
-              className={`text-sm font-semibold ${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline`}
-            >
-              View all videos →
-            </button>
+            <div className="flex items-center gap-3">
+              {canManageVideos && (
+                <button
+                  onClick={() => navigate('/admin/videos')}
+                  className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-700'} hover:underline`}
+                >
+                  Manage videos
+                </button>
+              )}
+              <button
+                onClick={() => navigate('/videos')}
+                className={`text-sm font-semibold ${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline`}
+              >
+                View all videos →
+              </button>
+            </div>
           </div>
 
           {loadingVideos ? (
@@ -212,6 +225,14 @@ const CourseListing = () => {
                         src={video.thumbnailUrl}
                         alt={video.title}
                         className="w-full h-full object-cover"
+                      />
+                    ) : video.videoUrl ? (
+                      <video
+                        src={video.videoUrl}
+                        className="w-full h-full object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
                       />
                     ) : (
                       <div className="text-5xl">🎬</div>

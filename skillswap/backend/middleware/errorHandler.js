@@ -1,6 +1,14 @@
 const errorHandler = (err, req, res, next) => {
   console.error(err)
 
+  const errorText = String(err?.message || '')
+  const isEmailAuthError = /invalid login|badcredentials|\b535\b|smtp authentication failed|\beauth\b/i.test(errorText)
+  if (isEmailAuthError) {
+    return res.status(502).json({
+      message: 'Email service authentication failed. Please switch to a stable SMTP provider (Brevo/SendGrid) or use a permitted sender account.',
+    })
+  }
+
   if (err.name === 'SequelizeValidationError') {
     return res.status(400).json({
       message: 'Validation error',

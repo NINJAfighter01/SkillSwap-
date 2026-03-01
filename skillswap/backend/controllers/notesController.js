@@ -43,7 +43,7 @@ exports.getNotes = async (req, res, next) => {
 
 exports.createNote = async (req, res, next) => {
   try {
-    const { lectureId, content, files, topicName } = req.body
+    const { lectureId, content, files, topicName, tags, folder, isPinned, isShared } = req.body
 
     if (!lectureId && !topicName) {
       return res.status(400).json({ message: 'Topic name is required' })
@@ -62,6 +62,10 @@ exports.createNote = async (req, res, next) => {
       userId: req.userId,
       content,
       files: files || [],
+      tags: Array.isArray(tags) ? tags : [],
+      folder: folder ? String(folder).trim() : 'General',
+      isPinned: Boolean(isPinned),
+      isShared: Boolean(isShared),
     })
 
     const io = req.app.get('io')

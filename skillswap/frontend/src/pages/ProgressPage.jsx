@@ -1,4 +1,5 @@
-import React, { useContext, useState, useEffect } from 'react'
+import React, { useContext, useState, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ThemeContext } from '../context/ThemeContext'
 import { AuthContext } from '../context/AuthContext'
 import { useWebSocket } from '../context/WebSocketContext'
@@ -12,10 +13,14 @@ const GOALS = {
   hours: 10,
 }
 
+const AUTO_REFRESH_MS = 4000
+
 const ProgressPage = () => {
   const { isDark } = useContext(ThemeContext)
+  const navigate = useNavigate()
   const { user } = useContext(AuthContext)
-  const { socket } = useWebSocket()
+  const { socket, connected } = useWebSocket()
+  const requestInFlightRef = useRef(false)
   const [stats, setStats] = useState({
     totalLectures: 0,
     watchedVideos: 0,
@@ -30,21 +35,44 @@ const ProgressPage = () => {
   const [notes, setNotes] = useState([])
   const [dailyActivity, setDailyActivity] = useState([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastSyncAt, setLastSyncAt] = useState(null)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
+  const [activeFilter, setActiveFilter] = useState('all')
 
   useEffect(() => {
-    fetchAllData(true)
-    const interval = setInterval(() => fetchAllData(false), 5000)
+    fetchAllData(true, 'initial')
+  }, [])
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) return undefined
+    const interval = setInterval(() => fetchAllData(false, 'polling'), AUTO_REFRESH_MS)
     return () => clearInterval(interval)
+  }, [autoRefreshEnabled])
+
+  useEffect(() => {
+    const onFocus = () => fetchAllData(false, 'focus')
+    window.addEventListener('focus', onFocus)
+
+    return () => {
+      window.removeEventListener('focus', onFocus)
+    }
   }, [])
 
   useEffect(() => {
     if (!socket) return
-    const handleUpdate = () => fetchAllData(false)
+
+    const handleUpdate = () => fetchAllData(false, 'socket')
     socket.on('progress:updated', handleUpdate)
     socket.on('notes:updated', handleUpdate)
+    socket.on('activity:updated', handleUpdate)
+    socket.on('dashboard:refresh', handleUpdate)
+
     return () => {
       socket.off('progress:updated', handleUpdate)
       socket.off('notes:updated', handleUpdate)
+      socket.off('activity:updated', handleUpdate)
+      socket.off('dashboard:refresh', handleUpdate)
     }
   }, [socket])
 
@@ -111,8 +139,12 @@ const ProgressPage = () => {
     return 'lecture'
   }
 
-  const fetchAllData = async (isInitial = false) => {
+  const fetchAllData = async (isInitial = false, source = 'manual') => {
+    if (requestInFlightRef.current && !isInitial) return
+    requestInFlightRef.current = true
+
     if (isInitial) setLoading(true)
+    else setIsRefreshing(true)
 
     try {
       const [progressRes, notesRes] = await Promise.all([
@@ -143,21 +175,34 @@ const ProgressPage = () => {
         totalHours: user?.totalHours || Math.round(totalCount * 1.5),
         streak: calculateStreak(progressData, notesData),
       })
+
+      setLastSyncAt(new Date())
     } catch (error) {
-      console.error('Error fetching progress:', error)
+      console.error(`Error fetching progress (${source}):`, error)
     } finally {
       if (isInitial) setLoading(false)
+      else setIsRefreshing(false)
+      requestInFlightRef.current = false
     }
   }
 
-  const getStreakColor = () => {
-    if (stats.streak >= 7) return 'text-red-500'
-    if (stats.streak >= 3) return 'text-orange-500'
-    return 'text-yellow-500'
+  const getStreakAccent = () => {
+    if (stats.streak >= 7) return 'text-red-400'
+    if (stats.streak >= 3) return 'text-orange-400'
+    return 'text-yellow-400'
+  }
+
+  const getSyncLabel = () => {
+    if (!lastSyncAt) return 'Not synced yet'
+    const diffSec = Math.max(0, Math.floor((Date.now() - lastSyncAt.getTime()) / 1000))
+    if (diffSec < 5) return 'Synced just now'
+    if (diffSec < 60) return `Synced ${diffSec}s ago`
+    const mins = Math.floor(diffSec / 60)
+    return `Synced ${mins}m ago`
   }
 
   const StatCard = ({ title, value, icon, color }) => (
-    <div className={`rounded-xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg border-l-4 ${color}`}>
+    <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800/80 border border-gray-700' : 'bg-white border border-gray-200'} shadow-lg`}>
       <div className="flex justify-between items-start">
         <div>
           <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -165,7 +210,7 @@ const ProgressPage = () => {
           </p>
           <p className="text-3xl font-bold mt-2">{value}</p>
         </div>
-        <div className="text-4xl">{icon}</div>
+        <div className={`text-4xl ${color}`}>{icon}</div>
       </div>
     </div>
   )
@@ -184,159 +229,186 @@ const ProgressPage = () => {
     return acc
   }, {})
 
+  const filteredProgress = useMemo(() => {
+    if (activeFilter === 'all') return progress
+    if (activeFilter === 'completed') return progress.filter((item) => item.isCompleted)
+    if (activeFilter === 'in-progress') return progress.filter((item) => !item.isCompleted)
+    return progress.filter((item) => getProgressType(item) === activeFilter)
+  }, [progress, activeFilter])
+
+  const filterCounts = {
+    all: progress.length,
+    lecture: progress.filter((item) => getProgressType(item) === 'lecture').length,
+    video: progress.filter((item) => getProgressType(item) === 'video').length,
+    completed: progress.filter((item) => item.isCompleted).length,
+    'in-progress': progress.filter((item) => !item.isCompleted).length,
+  }
+
+  const filters = [
+    { key: 'all', label: 'All' },
+    { key: 'lecture', label: 'Lectures' },
+    { key: 'video', label: 'Videos' },
+    { key: 'completed', label: 'Completed' },
+    { key: 'in-progress', label: 'In Progress' },
+  ]
+
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} py-12`}>
+    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-gray-900 via-slate-900 to-gray-950' : 'bg-gradient-to-br from-gray-50 to-blue-50'} py-10`}>
       <div className="max-w-7xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-12">
-          <h1 className="text-5xl font-bold mb-2">📊 Track Progress</h1>
-          <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Monitor your learning journey with detailed analytics
+        <div className={`rounded-2xl p-6 mb-8 ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-blue-100'} shadow-xl`}>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h1 className="text-4xl font-extrabold mb-2">📊 Track Progress</h1>
+              <p className={`text-base ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                Modern live dashboard for your lectures, videos, notes, and completion trends.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${connected ? 'bg-green-500/20 text-green-400 border border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'}`}>
+                {connected ? '● Live Connected' : '● Live Reconnecting'}
+              </span>
+
+              <button
+                onClick={() => setAutoRefreshEnabled((prev) => !prev)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${autoRefreshEnabled ? 'border-cyan-500/40 text-cyan-400 bg-cyan-500/10' : isDark ? 'border-gray-600 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+              >
+                {autoRefreshEnabled ? 'Auto Refresh ON' : 'Auto Refresh OFF'}
+              </button>
+
+              <button
+                onClick={() => fetchAllData(false, 'manual')}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:opacity-90 transition"
+              >
+                {isRefreshing ? 'Refreshing...' : 'Refresh Now'}
+              </button>
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            {getSyncLabel()}
           </p>
         </div>
 
-        {/* Main Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <StatCard
             title="Lectures Watched"
             value={stats.totalLectures}
             icon="📚"
-            color="border-blue-500"
+            color="text-blue-400"
           />
           <StatCard
             title="Videos Watched"
             value={stats.watchedVideos}
             icon="🎬"
-            color="border-indigo-500"
+            color="text-indigo-400"
           />
           <StatCard
             title="Notes Taken"
             value={stats.notesTaken}
             icon="📝"
-            color="border-cyan-500"
+            color="text-cyan-400"
           />
           <StatCard
             title="Completed"
             value={stats.completedItems}
             icon="✅"
-            color="border-green-500"
+            color="text-green-400"
           />
           <StatCard
             title="Learning Streak"
             value={`${stats.streak}🔥`}
             icon="🔥"
-            color={`border-${getStreakColor().split('-')[1]}-500`}
+            color={getStreakAccent()}
           />
           <StatCard
             title="Hours Spent"
             value={stats.totalHours}
             icon="⏱️"
-            color="border-purple-500"
+            color="text-purple-400"
           />
         </div>
 
-        {/* Overall Progress */}
-        <div className={`rounded-xl p-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg mb-8`}>
-          <h2 className="text-2xl font-bold mb-6">Overall Progress</h2>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Course Completion
-              </p>
-              <span className="text-2xl font-bold text-blue-600">{stats.completionPercentage}%</span>
-            </div>
-            <div className="w-full bg-gray-300 rounded-full h-4 overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-blue-500 to-purple-500 h-4 rounded-full transition-all duration-500"
-                style={{ width: `${stats.completionPercentage}%` }}
-              />
-            </div>
-            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              {stats.completedItems} of {stats.totalItems} items completed
-            </p>
-          </div>
-        </div>
-
-        {/* Performance Metrics */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Daily Activity */}
-          <div className={`rounded-xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-            <h3 className="text-xl font-bold mb-4">📈 Daily Activity</h3>
-            <div className="space-y-3">
-              {dailyActivity.map((day) => (
-                <div key={day.label} className="flex justify-between items-center">
-                  <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {day.label}
-                  </span>
-                  <div className="w-20 h-6 bg-gray-300 rounded-full overflow-hidden">
-                    <div
-                      className="bg-green-500 h-full rounded-full"
-                      style={{ width: `${Math.round((day.count / maxActivityCount) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <div className={`lg:col-span-2 rounded-2xl p-6 ${isDark ? 'bg-gray-800/80 border border-gray-700' : 'bg-white border border-gray-200'} shadow-lg`}>
+            <h2 className="text-2xl font-bold mb-5">Overall Progress</h2>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Completion Rate
+                </p>
+                <span className="text-3xl font-extrabold text-blue-500">{stats.completionPercentage}%</span>
+              </div>
 
-          {/* Learning Goals */}
-          <div className={`rounded-xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-            <h3 className="text-xl font-bold mb-4">🎯 This Week Goals</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Watch {GOALS.lectures} lectures</span>
-                <span className={`text-lg font-bold ${stats.totalLectures >= GOALS.lectures ? 'text-green-500' : 'text-yellow-500'}`}>
-                  {Math.min(stats.totalLectures, GOALS.lectures)}/{GOALS.lectures}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Complete {GOALS.videos} videos</span>
-                <span className={`text-lg font-bold ${stats.watchedVideos >= GOALS.videos ? 'text-green-500' : 'text-yellow-500'}`}>
-                  {Math.min(stats.watchedVideos, GOALS.videos)}/{GOALS.videos}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Take {GOALS.notes} notes</span>
-                <span className={`text-lg font-bold ${stats.notesTaken >= GOALS.notes ? 'text-green-500' : 'text-yellow-500'}`}>
-                  {Math.min(stats.notesTaken, GOALS.notes)}/{GOALS.notes}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">{GOALS.hours}+ hours learning</span>
-                <span className={`text-lg font-bold ${stats.totalHours >= GOALS.hours ? 'text-green-500' : 'text-yellow-500'}`}>
-                  {Math.min(stats.totalHours, GOALS.hours)}/{GOALS.hours}h
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Achievements */}
-          <div className={`rounded-xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-            <h3 className="text-xl font-bold mb-4">🏆 Achievements</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { emoji: '🌟', label: 'Starter' },
-                { emoji: '⚡', label: '5-Day Streak' },
-                { emoji: '🚀', label: 'Quick Learner' },
-                { emoji: '💯', label: '100% Complete' },
-              ].map((achievement, idx) => (
+              <div className={`w-full rounded-full h-4 overflow-hidden ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
                 <div
-                  key={idx}
-                  className={`rounded-lg p-3 text-center ${
-                    isDark ? 'bg-gray-700' : 'bg-gray-100'
-                  } cursor-pointer hover:scale-105 transition`}
-                >
-                  <div className="text-2xl mb-1">{achievement.emoji}</div>
-                  <p className="text-xs font-medium">{achievement.label}</p>
-                </div>
-              ))}
+                  className="bg-gradient-to-r from-blue-500 via-cyan-500 to-purple-500 h-4 rounded-full transition-all duration-700"
+                  style={{ width: `${stats.completionPercentage}%` }}
+                />
+              </div>
+
+              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                {stats.completedItems} completed out of {stats.totalItems} tracked items.
+              </p>
+            </div>
+          </div>
+
+          <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800/80 border border-gray-700' : 'bg-white border border-gray-200'} shadow-lg`}>
+            <h3 className="text-xl font-bold mb-4">🎯 Weekly Goals</h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span>Lectures</span>
+                <span className={stats.totalLectures >= GOALS.lectures ? 'text-green-400 font-bold' : 'text-yellow-400 font-bold'}>{Math.min(stats.totalLectures, GOALS.lectures)}/{GOALS.lectures}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Videos</span>
+                <span className={stats.watchedVideos >= GOALS.videos ? 'text-green-400 font-bold' : 'text-yellow-400 font-bold'}>{Math.min(stats.watchedVideos, GOALS.videos)}/{GOALS.videos}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Notes</span>
+                <span className={stats.notesTaken >= GOALS.notes ? 'text-green-400 font-bold' : 'text-yellow-400 font-bold'}>{Math.min(stats.notesTaken, GOALS.notes)}/{GOALS.notes}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Hours</span>
+                <span className={stats.totalHours >= GOALS.hours ? 'text-green-400 font-bold' : 'text-yellow-400 font-bold'}>{Math.min(stats.totalHours, GOALS.hours)}/{GOALS.hours}h</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Detailed Progress List */}
-        <div className={`rounded-xl shadow-lg p-8 ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          <h2 className="text-2xl font-bold mb-6">📋 Learning Progress Details</h2>
+        <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800/80 border border-gray-700' : 'bg-white border border-gray-200'} shadow-lg mb-8`}>
+          <h3 className="text-xl font-bold mb-4">📈 Last 7 Days Activity</h3>
+          <div className="space-y-4">
+            {dailyActivity.map((day) => (
+              <div key={day.label} className="flex items-center gap-3">
+                <span className={`w-10 text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{day.label}</span>
+                <div className={`flex-1 h-3 rounded-full overflow-hidden ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                  <div
+                    className="h-3 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-500 transition-all duration-500"
+                    style={{ width: `${Math.round((day.count / maxActivityCount) * 100)}%` }}
+                  />
+                </div>
+                <span className={`w-8 text-right text-xs font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{day.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className={`rounded-2xl shadow-lg p-6 ${isDark ? 'bg-gray-800/80 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <h2 className="text-2xl font-bold">📋 Learning Progress Details</h2>
+            <div className="flex flex-wrap gap-2">
+              {filters.map((filter) => (
+                <button
+                  key={filter.key}
+                  onClick={() => setActiveFilter(filter.key)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition border ${activeFilter === filter.key ? 'bg-blue-600 text-white border-blue-500' : isDark ? 'bg-gray-800 text-gray-300 border-gray-600 hover:bg-gray-700' : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'}`}
+                >
+                  {filter.label} ({filterCounts[filter.key]})
+                </button>
+              ))}
+            </div>
+          </div>
 
           {loading ? (
             <div className="text-center py-12">
@@ -347,24 +419,32 @@ const ProgressPage = () => {
                 </p>
               </div>
             </div>
-          ) : progress.length === 0 ? (
+          ) : filteredProgress.length === 0 ? (
             <div className="text-center py-12">
               <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                📚 Start watching lectures to track your progress!
+                📚 No items found for this filter yet.
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              {progress.map((item, idx) => (
+              {filteredProgress.map((item, idx) => (
                 <div
                   key={idx}
-                  className={`p-5 rounded-lg border transition ${
+                  className={`p-5 rounded-xl border transition cursor-pointer ${
                     isDark
-                      ? 'bg-gray-700 border-gray-600 hover:bg-gray-600'
+                      ? 'bg-gray-700/60 border-gray-600 hover:bg-gray-700'
                       : 'bg-gray-50 border-gray-300 hover:bg-gray-100'
                   }`}
+                  onClick={() => {
+                    const type = getProgressType(item)
+                    if (type === 'video' && item.videoId) {
+                      navigate(`/videos/${item.videoId}`)
+                    } else if (type === 'lecture' && item.lectureId) {
+                      navigate(`/lecture/${item.lectureId}`)
+                    }
+                  }}
                 >
-                  <div className="flex justify-between items-start mb-3">
+                  <div className="flex justify-between items-start gap-4 mb-3">
                     <div className="flex-1">
                       <h3 className="font-bold text-lg">
                         {idx + 1}. {getProgressType(item) === 'video' ? (item.Video?.title || 'Video') : (item.Lecture?.title || 'Lecture')}
@@ -406,7 +486,6 @@ const ProgressPage = () => {
                     </div>
                   </div>
 
-                  {/* Quick Stats */}
                   <div className="grid grid-cols-3 gap-3 mt-4">
                     <div className={`p-2 rounded ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
                       <p className="text-xs text-gray-500">Duration</p>
@@ -437,12 +516,14 @@ const ProgressPage = () => {
           )}
         </div>
 
-        {/* Bottom CTA */}
         <div className="mt-12 text-center">
           <p className={`text-lg mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Keep up the great work! 🎉
+            Keep your momentum going — progress is now live and auto-synced. 🚀
           </p>
-          <button className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-bold hover:shadow-lg transition">
+          <button
+            onClick={() => navigate('/lectures')}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-bold hover:shadow-lg transition"
+          >
             Continue Learning
           </button>
         </div>

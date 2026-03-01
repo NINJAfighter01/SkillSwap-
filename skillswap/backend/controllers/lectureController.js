@@ -40,15 +40,21 @@ exports.getAllLectures = async (req, res, next) => {
 
 exports.getLectureById = async (req, res, next) => {
   try {
-    const lecture = await Lecture.findByPk(req.params.id, {
+    const LectureModel = require('../models/Lecture');
+    const VideoModel = require('../models/Video');
+    const lecture = await LectureModel.findByPk(req.params.id, {
       include: [
         {
           model: User,
           as: 'teacher',
           attributes: ['id', 'name', 'profilePicture'],
         },
+        {
+          model: VideoModel,
+          as: 'Video',
+        },
       ],
-    })
+    });
 
     if (!lecture) {
       return res.status(404).json({ message: 'Lecture not found' })

@@ -53,9 +53,21 @@ const User = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    location: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'Mumbai, India',
+    },
     isTeacher: {
       type: DataTypes.BOOLEAN,
       defaultValue: true, // Everyone can upload videos by default
+    },
+    role: {
+      type: DataTypes.STRING,
+      defaultValue: 'user',
+      validate: {
+        isIn: [['user', 'developer', 'admin']],
+      },
     },
     lecturesCompleted: {
       type: DataTypes.INTEGER,

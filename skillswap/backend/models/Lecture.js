@@ -66,3 +66,7 @@ const Lecture = sequelize.define(
 )
 
 module.exports = Lecture
+// Association for Video
+const Video = require('./Video');
+Lecture.hasOne(Video, { foreignKey: 'lectureId', as: 'Video' });
+Video.belongsTo(Lecture, { foreignKey: 'lectureId', as: 'Lecture' });

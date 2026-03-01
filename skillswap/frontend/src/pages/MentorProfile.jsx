@@ -10,6 +10,17 @@ const MentorProfile = () => {
   const [mentor, setMentor] = useState(null)
   const [reviews, setReviews] = useState([])
   const [teachingSkills, setTeachingSkills] = useState([])
+  const [mentorStats, setMentorStats] = useState({
+    totalReviews: 0,
+    studentReviews: 0,
+    totalSessions: 0,
+    completedSessions: 0,
+    completionRate: 0,
+    averageResponseTimeMinutes: null,
+    averageRating: 0,
+    isTopMentor: false,
+    isVerifiedMentor: false,
+  })
   const [loading, setLoading] = useState(true)
   const [selectedSkill, setSelectedSkill] = useState(null)
 
@@ -22,6 +33,7 @@ const MentorProfile = () => {
       // Get mentor profile with stats
       const profileRes = await reviewService.getMentorProfile(mentorId)
       setMentor(profileRes.data.mentor || {})
+      setMentorStats(profileRes.data.stats || {})
 
       // Get mentor reviews
       const reviewsRes = await reviewService.getMentorReviews(mentorId)
@@ -84,12 +96,24 @@ const MentorProfile = () => {
               <div className="flex flex-col gap-3">
                 <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                   <p className="text-sm text-gray-500">Average Rating</p>
-                  <p className="text-3xl font-bold">⭐ {mentor.averageRating?.toFixed(1) || 'N/A'}/5</p>
+                  <p className="text-3xl font-bold">⭐ {mentorStats.averageRating?.toFixed?.(1) || mentor.averageRating?.toFixed?.(1) || 'N/A'}/5</p>
                 </div>
 
-                {mentor.isTopMentor && (
+                {mentorStats.isVerifiedMentor && (
+                  <div className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold text-center">
+                    ✅ Verified Mentor
+                  </div>
+                )}
+
+                {mentorStats.isTopMentor && (
                   <div className="px-4 py-2 bg-yellow-500 text-white rounded-lg font-bold text-center">
                     🏆 Top Mentor
+                  </div>
+                )}
+
+                {mentorStats.averageResponseTimeMinutes !== null && mentorStats.averageResponseTimeMinutes <= 120 && (
+                  <div className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-center">
+                    ⚡ Quick Responder
                   </div>
                 )}
               </div>
@@ -105,18 +129,36 @@ const MentorProfile = () => {
               </div>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                 <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                  <p className="text-sm text-gray-500">Total Reviews</p>
-                  <p className="text-2xl font-bold">{mentor.totalReviews || 0}</p>
+                  <p className="text-sm text-gray-500">Student Reviews</p>
+                  <p className="text-2xl font-bold">{mentorStats.studentReviews || mentorStats.totalReviews || 0}</p>
                 </div>
                 <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                   <p className="text-sm text-gray-500">Completed Sessions</p>
-                  <p className="text-2xl font-bold">{mentor.completedSessions || 0}</p>
+                  <p className="text-2xl font-bold">{mentorStats.completedSessions || 0}</p>
                 </div>
                 <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                   <p className="text-sm text-gray-500">Skills Teaching</p>
                   <p className="text-2xl font-bold">{teachingSkills.length}</p>
+                </div>
+                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                  <p className="text-sm text-gray-500">Completion Rate</p>
+                  <p className="text-2xl font-bold">{mentorStats.completionRate || 0}%</p>
+                </div>
+                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                  <p className="text-sm text-gray-500">Response Time</p>
+                  <p className="text-2xl font-bold">
+                    {mentorStats.averageResponseTimeMinutes === null
+                      ? 'N/A'
+                      : mentorStats.averageResponseTimeMinutes < 60
+                        ? `${mentorStats.averageResponseTimeMinutes}m`
+                        : `${Math.round(mentorStats.averageResponseTimeMinutes / 60)}h`}
+                  </p>
+                </div>
+                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                  <p className="text-sm text-gray-500">Total Sessions</p>
+                  <p className="text-2xl font-bold">{mentorStats.totalSessions || 0}</p>
                 </div>
               </div>
             </div>

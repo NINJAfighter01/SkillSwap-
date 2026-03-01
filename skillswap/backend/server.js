@@ -1,8 +1,9 @@
-require('dotenv').config()
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') })
 const express = require('express')
 const http = require('http')
 const { Server } = require('socket.io')
 const cors = require('cors')
+const path = require('path')
 const sequelize = require('./config/database')
 const errorHandler = require('./middleware/errorHandler')
 const { socketHandler } = require('./websocket/socketHandler')
@@ -20,6 +21,7 @@ const sessionRoutes = require('./routes/sessionRoutes')
 const reviewRoutes = require('./routes/reviewRoutes')
 const videoRoutes = require('./routes/videoRoutes')
 const supportRoutes = require('./routes/supportRoutes')
+const inviteRoutes = require('./routes/inviteRoutes')
 
 // Import models
 const User = require('./models/User')
@@ -38,6 +40,9 @@ const Session = require('./models/Session')
 const Review = require('./models/Review')
 const Rating = require('./models/Rating')
 const Video = require('./models/Video')
+const VideoComment = require('./models/VideoComment')
+const VideoReport = require('./models/VideoReport')
+const VideoNote = require('./models/VideoNote')
 const Support = require('./models/Support')
 const SupportMessage = require('./models/SupportMessage')
 
@@ -61,6 +66,7 @@ app.set('io', io)
 app.use(cors())
 app.use(express.json({ limit: '50mb' })) // Increased limit for file uploads
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 // Routes
 app.use('/api/auth', authRoutes)
@@ -75,6 +81,7 @@ app.use('/api/sessions', sessionRoutes)
 app.use('/api/reviews', reviewRoutes)
 app.use('/api/videos', videoRoutes)
 app.use('/api/support', supportRoutes)
+app.use('/api/invitations', inviteRoutes)
 
 // Health check
 app.get('/health', (req, res) => {
@@ -126,6 +133,21 @@ const startServer = async () => {
     User.hasMany(Video, { foreignKey: 'uploaderId', as: 'videos' })
     Video.belongsTo(User, { foreignKey: 'uploaderId', as: 'uploader' })
 
+    Video.hasMany(VideoComment, { foreignKey: 'videoId', as: 'comments' })
+    VideoComment.belongsTo(Video, { foreignKey: 'videoId' })
+    User.hasMany(VideoComment, { foreignKey: 'userId' })
+    VideoComment.belongsTo(User, { foreignKey: 'userId', as: 'user' })
+
+    Video.hasMany(VideoReport, { foreignKey: 'videoId', as: 'reports' })
+    VideoReport.belongsTo(Video, { foreignKey: 'videoId' })
+    User.hasMany(VideoReport, { foreignKey: 'userId' })
+    VideoReport.belongsTo(User, { foreignKey: 'userId', as: 'user' })
+
+    Video.hasMany(VideoNote, { foreignKey: 'videoId', as: 'notes' })
+    VideoNote.belongsTo(Video, { foreignKey: 'videoId' })
+    User.hasMany(VideoNote, { foreignKey: 'userId' })
+    VideoNote.belongsTo(User, { foreignKey: 'userId', as: 'user' })
+
     // Support associations
     User.hasMany(Support, { foreignKey: 'userId' })
     Support.belongsTo(User, { foreignKey: 'userId' })
@@ -148,21 +170,40 @@ const startServer = async () => {
       if (!columns || columns.length === 0) return
 
       const hasTopicName = columns.some((col) => col.name === 'topicName')
+      const hasTags = columns.some((col) => col.name === 'tags')
+      const hasFolder = columns.some((col) => col.name === 'folder')
+      const hasIsPinned = columns.some((col) => col.name === 'isPinned')
+      const hasIsShared = columns.some((col) => col.name === 'isShared')
       const lectureColumn = columns.find((col) => col.name === 'lectureId')
       const lectureNotNull = lectureColumn ? lectureColumn.notnull === 1 : false
 
       if (!hasTopicName && !lectureNotNull) {
         await sequelize.query('ALTER TABLE Notes ADD COLUMN topicName TEXT')
-        return
+      }
+
+      if (!hasTags) {
+        await sequelize.query("ALTER TABLE Notes ADD COLUMN tags TEXT DEFAULT '[]'")
+      }
+
+      if (!hasFolder) {
+        await sequelize.query("ALTER TABLE Notes ADD COLUMN folder TEXT DEFAULT 'General'")
+      }
+
+      if (!hasIsPinned) {
+        await sequelize.query('ALTER TABLE Notes ADD COLUMN isPinned BOOLEAN DEFAULT 0')
+      }
+
+      if (!hasIsShared) {
+        await sequelize.query('ALTER TABLE Notes ADD COLUMN isShared BOOLEAN DEFAULT 0')
       }
 
       if (!lectureNotNull && hasTopicName) return
 
-      await sequelize.query('CREATE TABLE IF NOT EXISTS Notes_new (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, topicName TEXT, lectureId INTEGER, userId INTEGER NOT NULL, files TEXT, createdAt DATETIME, updatedAt DATETIME, FOREIGN KEY(lectureId) REFERENCES Lectures(id), FOREIGN KEY(userId) REFERENCES Users(id))')
+      await sequelize.query('CREATE TABLE IF NOT EXISTS Notes_new (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, topicName TEXT, lectureId INTEGER, userId INTEGER NOT NULL, files TEXT, tags TEXT DEFAULT "[]", folder TEXT DEFAULT "General", isPinned BOOLEAN DEFAULT 0, isShared BOOLEAN DEFAULT 0, createdAt DATETIME, updatedAt DATETIME, FOREIGN KEY(lectureId) REFERENCES Lectures(id), FOREIGN KEY(userId) REFERENCES Users(id))')
       if (hasTopicName) {
-        await sequelize.query('INSERT INTO Notes_new (id, content, topicName, lectureId, userId, files, createdAt, updatedAt) SELECT id, content, topicName, lectureId, userId, files, createdAt, updatedAt FROM Notes')
+        await sequelize.query('INSERT INTO Notes_new (id, content, topicName, lectureId, userId, files, tags, folder, isPinned, isShared, createdAt, updatedAt) SELECT id, content, topicName, lectureId, userId, files, COALESCE(tags, "[]"), COALESCE(folder, "General"), COALESCE(isPinned, 0), COALESCE(isShared, 0), createdAt, updatedAt FROM Notes')
       } else {
-        await sequelize.query('INSERT INTO Notes_new (id, content, topicName, lectureId, userId, files, createdAt, updatedAt) SELECT id, content, NULL as topicName, lectureId, userId, files, createdAt, updatedAt FROM Notes')
+        await sequelize.query('INSERT INTO Notes_new (id, content, topicName, lectureId, userId, files, tags, folder, isPinned, isShared, createdAt, updatedAt) SELECT id, content, NULL as topicName, lectureId, userId, files, COALESCE(tags, "[]"), COALESCE(folder, "General"), COALESCE(isPinned, 0), COALESCE(isShared, 0), createdAt, updatedAt FROM Notes')
       }
       await sequelize.query('DROP TABLE Notes')
       await sequelize.query('ALTER TABLE Notes_new RENAME TO Notes')
@@ -201,6 +242,95 @@ const startServer = async () => {
     }
 
     await migrateFeedbackTable()
+
+    // Migrate Users table to include role and location columns
+    const migrateUsersTable = async () => {
+      const [columns] = await sequelize.query("PRAGMA table_info('Users')")
+      if (!columns || columns.length === 0) return
+
+      const hasRole = columns.some((col) => col.name === 'role')
+      const hasLocation = columns.some((col) => col.name === 'location')
+
+      if (hasRole && hasLocation) return
+
+      if (!hasRole) {
+        console.log('Migrating Users table: adding role column...')
+        await sequelize.query("ALTER TABLE Users ADD COLUMN role TEXT DEFAULT 'user'")
+        await sequelize.query("UPDATE Users SET role = 'user' WHERE role IS NULL OR role = ''")
+      }
+
+      if (!hasLocation) {
+        console.log('Migrating Users table: adding location column...')
+        await sequelize.query("ALTER TABLE Users ADD COLUMN location TEXT DEFAULT 'Mumbai, India'")
+        await sequelize.query("UPDATE Users SET location = 'Mumbai, India' WHERE location IS NULL OR location = ''")
+      }
+
+      console.log('Users table migrated successfully')
+    }
+
+    await migrateUsersTable()
+
+    // Migrate Videos table to include lectureId (required by Lecture-Video association)
+    const migrateVideosTable = async () => {
+      const [columns] = await sequelize.query("PRAGMA table_info('Videos')")
+      if (!columns || columns.length === 0) return
+
+      const hasLectureId = columns.some((col) => col.name === 'lectureId')
+      if (hasLectureId) {
+        // Table already has lectureId, check for new columns
+        const newColumns = [
+          'category',
+          'skillType',
+          'location',
+          'tags',
+          'allowComments',
+          'wantSkillInReturn'
+        ]
+        
+        for (const col of newColumns) {
+          const hasColumn = columns.some((c) => c.name === col)
+          if (!hasColumn) {
+            console.log(`Adding column ${col} to Videos table...`)
+            if (col === 'tags') {
+              await sequelize.query(`ALTER TABLE Videos ADD COLUMN ${col} JSON DEFAULT '[]'`)
+            } else if (col === 'allowComments' || col === 'wantSkillInReturn') {
+              await sequelize.query(`ALTER TABLE Videos ADD COLUMN ${col} BOOLEAN DEFAULT 1`)
+            } else {
+              await sequelize.query(`ALTER TABLE Videos ADD COLUMN ${col} TEXT`)
+            }
+          }
+        }
+        return
+      }
+
+      console.log('Migrating Videos table: adding lectureId column...')
+      await sequelize.query('ALTER TABLE Videos ADD COLUMN lectureId INTEGER')
+      
+      // Also add new columns during initial migration
+      const newColumns = [
+        'category',
+        'skillType',
+        'location',
+        'tags',
+        'allowComments',
+        'wantSkillInReturn'
+      ]
+      
+      for (const col of newColumns) {
+        console.log(`Adding column ${col} to Videos table...`)
+        if (col === 'tags') {
+          await sequelize.query(`ALTER TABLE Videos ADD COLUMN ${col} JSON DEFAULT '[]'`)
+        } else if (col === 'allowComments' || col === 'wantSkillInReturn') {
+          await sequelize.query(`ALTER TABLE Videos ADD COLUMN ${col} BOOLEAN DEFAULT 1`)
+        } else {
+          await sequelize.query(`ALTER TABLE Videos ADD COLUMN ${col} TEXT`)
+        }
+      }
+      
+      console.log('Videos table migrated successfully')
+    }
+
+    await migrateVideosTable()
     
     // Enable foreign keys
     await sequelize.query('PRAGMA foreign_keys = ON')
@@ -235,7 +365,8 @@ const startServer = async () => {
           isPremium: false,
           isLive: false,
           views: 0,
-          videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          videoUrl: '/video/motivational-quote.3840x2160.mp4',
+
         },
         {
           title: 'React.js Fundamentals',
@@ -248,7 +379,7 @@ const startServer = async () => {
           isPremium: false,
           isLive: false,
           views: 0,
-          videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          videoUrl: '/video/motivational-quote.3840x2160.mp4',
         },
         {
           title: 'Node.js Backend Development',
@@ -261,7 +392,7 @@ const startServer = async () => {
           isPremium: true,
           isLive: false,
           views: 0,
-          videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          videoUrl: '/video/motivational-quote.3840x2160.mp4',
         },
         {
           title: 'Database Design with SQL',
@@ -274,11 +405,23 @@ const startServer = async () => {
           isPremium: false,
           isLive: false,
           views: 0,
-          videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          videoUrl: '/video/motivational-quote.3840x2160.mp4'
+          ,
         },
       ])
       console.log('Sample lectures created')
     }
+
+    server.on('error', (listenError) => {
+      if (listenError.code === 'EADDRINUSE') {
+        console.log(`⚠ Port ${PORT} is already in use.`)
+        console.log('⚠ Backend is likely already running on this port.')
+        process.exit(0)
+      }
+
+      console.error('Error starting server:', listenError)
+      process.exit(1)
+    })
 
     server.listen(PORT, () => {
       console.log(`✓ Server running on http://localhost:${PORT}`)

@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from 'react'
+import React, { useContext, useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ThemeContext } from '../context/ThemeContext'
 import { AuthContext } from '../context/AuthContext'
@@ -16,6 +16,7 @@ const Profile = () => {
   // State management
   const [isEditing, setIsEditing] = useState(false)
   const [isEditingAbout, setIsEditingAbout] = useState(false)
+  const locationSaveTimeoutRef = useRef(null)
   const [bioExpanded, setBioExpanded] = useState(false)
   const [activeTab, setActiveTab] = useState(tabFromUrl || 'overview')
   const [showAIPanel, setShowAIPanel] = useState(false)
@@ -145,12 +146,29 @@ const Profile = () => {
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (locationSaveTimeoutRef.current) {
+        clearTimeout(locationSaveTimeoutRef.current)
+      }
+    }
+  }, [])
+
   // Load profile data from backend on mount
   useEffect(() => {
     const loadProfileData = async () => {
       try {
         const response = await userService.getProfile()
         const profileData = response.data.user
+
+        setFormData(prev => ({
+          ...prev,
+          name: profileData.name || prev.name,
+          username: profileData.email?.split('@')[0] || prev.username,
+          bio: profileData.bio || prev.bio,
+          location: profileData.location || prev.location,
+          isTeacher: profileData.isTeacher !== undefined ? profileData.isTeacher : prev.isTeacher,
+        }))
         
         // Load skills from backend
         if (profileData.skills && Array.isArray(profileData.skills) && profileData.skills.length > 0) {
@@ -186,7 +204,7 @@ const Profile = () => {
     username: user?.email?.split('@')[0] || '',
     role: 'Full Stack Developer',
     bio: user?.bio || 'Passionate learner and developer building amazing projects.',
-    location: 'Mumbai, India',
+    location: user?.location || 'Mumbai, India',
     tagline: 'Code. Learn. Grow. Repeat.',
     language: 'English, Hindi',
     timezone: 'IST (GMT+5:30)',
@@ -536,9 +554,44 @@ const Profile = () => {
     setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value })
   }
 
+  const saveLocationInRealtime = async (locationValue) => {
+    try {
+      const response = await userService.updateProfile({ location: locationValue })
+      if (response?.data?.user) {
+        updateUser({ ...user, ...response.data.user })
+      }
+    } catch (error) {
+      console.error('Error auto-saving location:', error)
+    }
+  }
+
+  const handleLocationChange = (e) => {
+    const locationValue = e.target.value
+    setFormData(prev => ({ ...prev, location: locationValue }))
+
+    if (locationSaveTimeoutRef.current) {
+      clearTimeout(locationSaveTimeoutRef.current)
+    }
+
+    locationSaveTimeoutRef.current = setTimeout(() => {
+      saveLocationInRealtime(locationValue)
+    }, 400)
+  }
+
+  const handleLocationBlur = (e) => {
+    const locationValue = e.target.value
+    if (locationSaveTimeoutRef.current) {
+      clearTimeout(locationSaveTimeoutRef.current)
+    }
+    saveLocationInRealtime(locationValue)
+  }
+
   const saveProfile = async () => {
     try {
-      await userService.updateProfile(formData)
+      const response = await userService.updateProfile(formData)
+      if (response?.data?.user) {
+        updateUser({ ...user, ...response.data.user })
+      }
       setIsEditing(false)
       alert('Profile updated successfully!')
     } catch (error) {
@@ -582,7 +635,16 @@ const Profile = () => {
                     {formData.name}
                   </h1>
                 )}
-                <button onClick={() => setIsEditing(!isEditing)} className="text-blue-400 hover:text-blue-300">
+                <button
+                  onClick={() => {
+                    if (isEditing) {
+                      saveProfile()
+                    } else {
+                      setIsEditing(true)
+                    }
+                  }}
+                  className="text-blue-400 hover:text-blue-300"
+                >
                   {isEditing ? '✓' : '✏️'}
                 </button>
               </div>
@@ -700,7 +762,13 @@ const Profile = () => {
                     <h2 className="text-2xl font-bold">About</h2>
                     <div className="flex gap-2">
                       <button 
-                        onClick={() => setIsEditingAbout(!isEditingAbout)}
+                        onClick={() => {
+                          if (isEditingAbout) {
+                            saveProfile().then(() => setIsEditingAbout(false))
+                          } else {
+                            setIsEditingAbout(true)
+                          }
+                        }}
                         className="text-xl hover:scale-110 transition"
                         title={isEditingAbout ? 'Save' : 'Edit'}
                       >
@@ -751,7 +819,8 @@ const Profile = () => {
                           <input
                             name="location"
                             value={formData.location}
-                            onChange={handleChange}
+                            onChange={handleLocationChange}
+                            onBlur={handleLocationBlur}
                             placeholder="Your city, country"
                             className="w-full bg-white/10 text-gray-300 rounded px-2 py-1 border border-white/20 focus:border-cyan-400 outline-none text-sm mt-1"
                           />

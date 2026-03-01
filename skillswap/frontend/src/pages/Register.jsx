@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthContext } from '../context/AuthContext'
 import { ThemeContext } from '../context/ThemeContext'
 
@@ -7,6 +7,8 @@ const Register = () => {
   const { isDark } = useContext(ThemeContext)
   const { register, googleLogin } = useContext(AuthContext)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const referralCode = (searchParams.get('ref') || '').trim()
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -32,7 +34,7 @@ const Register = () => {
 
     setIsLoading(true)
     try {
-      await register(formData)
+      await register(formData, referralCode || undefined)
       navigate('/')
     } catch (err) {
       setError(err.message || 'Registration failed')
@@ -44,7 +46,7 @@ const Register = () => {
     setError('')
     setIsGoogleLoading(true)
     try {
-      await googleLogin()
+      await googleLogin(referralCode || undefined)
       navigate('/')
     } catch (err) {
       setError(err.message || 'Google sign up failed')
@@ -56,6 +58,12 @@ const Register = () => {
     <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <div className={`max-w-md w-full rounded-lg shadow-lg p-8 ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
         <h2 className="text-3xl font-bold text-center mb-8">Sign Up for SkillSwap</h2>
+
+        {referralCode && (
+          <div className="bg-blue-100 border border-blue-300 text-blue-800 px-4 py-3 rounded mb-4 text-sm">
+            Referral code applied: <span className="font-bold">{referralCode}</span>
+          </div>
+        )}
 
         {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
 

@@ -50,6 +50,36 @@ const Note = sequelize.define(
         this.setDataValue('files', JSON.stringify(value || []))
       }
     },
+    tags: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: '[]',
+      get() {
+        const rawValue = this.getDataValue('tags')
+        if (!rawValue) return []
+        try {
+          return JSON.parse(rawValue)
+        } catch (e) {
+          return []
+        }
+      },
+      set(value) {
+        this.setDataValue('tags', JSON.stringify(value || []))
+      },
+    },
+    folder: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'General',
+    },
+    isPinned: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    isShared: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
   },
   {
     timestamps: true,

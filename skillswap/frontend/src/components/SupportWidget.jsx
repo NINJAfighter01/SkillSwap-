@@ -1,4 +1,5 @@
 import React, { useContext, useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { ThemeContext } from '../context/ThemeContext'
 
@@ -23,10 +24,16 @@ const SupportWidget = () => {
   return (
     <div className="fixed bottom-8 right-8 z-50">
       {/* Chat Bubble Menu */}
-      {isOpen && (
-        <div className={`absolute bottom-24 right-0 rounded-2xl shadow-2xl p-6 w-80 ${
-          isDark ? 'bg-gray-800' : 'bg-white'
-        } animate-slide-up`}>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            key="support-bubble"
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.9 }}
+            transition={{ duration: 0.35, type: 'spring' }}
+            className={`absolute bottom-24 right-0 rounded-2xl shadow-2xl p-6 w-80 ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+          >
           <h3 className={`text-lg font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
             🤖 SkillSwap Support
           </h3>
@@ -67,21 +74,25 @@ const SupportWidget = () => {
               💡 <strong>Quick Tip:</strong> Common issues are usually resolved within seconds by our AI!
             </p>
           </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Floating Button */}
-      <button
+      <motion.button
         onClick={() => setIsOpen(!isOpen)}
-        className={`h-16 w-16 rounded-full shadow-2xl flex items-center justify-center text-3xl transition-all hover:scale-110 ${
+        whileTap={{ scale: 0.85, rotate: -10 }}
+        whileHover={{ scale: 1.12, rotate: 6 }}
+        className={`h-16 w-16 rounded-full shadow-2xl flex items-center justify-center text-3xl transition-all focus:outline-none focus:ring-4 focus:ring-blue-400/40 ${
           isOpen
             ? 'bg-red-600 hover:bg-red-700'
             : 'bg-gradient-to-br from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
         } animate-pulse`}
         title={isOpen ? 'Close Support' : 'Open Support'}
+        aria-label={isOpen ? 'Close Support' : 'Open Support'}
       >
         {isOpen ? '✕' : '💬'}
-      </button>
+      </motion.button>
 
       {/* Notification Badge */}
       {!isOpen && (

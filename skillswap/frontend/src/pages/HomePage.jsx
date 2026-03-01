@@ -43,12 +43,15 @@ const HomePage = () => {
 
           <div className="flex gap-4 justify-center">
             <button 
-              onClick={() => navigate('/lectures')}
+              onClick={() => navigate('/courses')}
               className="bg-white text-blue-600 px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition"
             >
               Get Started
             </button>
-            <button className="border-2 border-white px-8 py-3 rounded-lg font-bold hover:bg-white hover:text-blue-600 transition">
+            <button
+              onClick={() => navigate('/how-it-works')}
+              className="border-2 border-white px-8 py-3 rounded-lg font-bold hover:bg-white hover:text-blue-600 transition"
+            >
               Learn More
             </button>
           </div>
@@ -81,11 +84,6 @@ const HomePage = () => {
               desc: 'Get help anytime through chat, calls, or contact forms'
             },
             {
-              icon: '🎁',
-              title: 'Premium Content',
-              desc: 'Unlock exclusive lectures and premium notes'
-            },
-            {
               icon: '📝',
               title: 'Interactive Notes',
               desc: 'Take and organize notes while watching lectures'
@@ -116,9 +114,6 @@ const HomePage = () => {
                 }
                 if (feature.title === '24/7 Support') {
                   navigate('/support')
-                }
-                if (feature.title === 'Premium Content') {
-                  navigate('/videos?filter=tokens')
                 }
               }}
               className={`rounded-lg p-8 text-center ${

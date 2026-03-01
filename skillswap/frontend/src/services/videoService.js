@@ -15,6 +15,10 @@ const videoService = {
   getMyVideos: () =>
     axios.get(`${API_URL}/my/videos`),
 
+  // Dashboard analytics
+  getDashboardAnalytics: () =>
+    axios.get(`${API_URL}/dashboard/analytics`),
+
   // Upload video with extended timeout (10 minutes for large files)
   uploadVideo: (formData, onUploadProgress) =>
     axios.post(`${API_URL}/upload`, formData, {
@@ -40,6 +44,26 @@ const videoService = {
   // Like video
   likeVideo: (id) =>
     axios.post(`${API_URL}/${id}/like`),
+
+  // Report video
+  reportVideo: (id, payload) =>
+    axios.post(`${API_URL}/${id}/report`, payload),
+
+  // Comments
+  getVideoComments: (id) =>
+    axios.get(`${API_URL}/${id}/comments`),
+  addVideoComment: (id, comment) =>
+    axios.post(`${API_URL}/${id}/comments`, { comment }),
+
+  // Video notes
+  getVideoNotes: (id) =>
+    axios.get(`${API_URL}/${id}/notes`),
+  addVideoNote: (id, noteFormData) =>
+    axios.post(`${API_URL}/${id}/notes`, noteFormData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }),
 
   // Watch premium video (deduct tokens)
   watchVideo: (id) =>

@@ -23,4 +23,5 @@ UPDATE Users SET tokens = 500 WHERE email = 'user@gmail.com';
 SELECT id, name, email, tokens
 FROM Users
 WHERE
-    email = 'user@gmail.com';
+    email = 'user@gmail.com'; 
+       

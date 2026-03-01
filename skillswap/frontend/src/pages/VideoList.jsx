@@ -22,6 +22,9 @@ const VideoList = () => {
     visibility: '',
   })
 
+  const canManageVideos = user?.role === 'admin' || user?.role === 'developer'
+  const canSeeUploadButton = Boolean(user)
+
   // Load videos
   const loadVideos = async () => {
     try {
@@ -98,7 +101,7 @@ const VideoList = () => {
               <p className="text-xs text-green-400 mt-1">🟢 Live - Real-time updates enabled</p>
             )}
           </div>
-          {user?.isTeacher && (
+          {canSeeUploadButton && (
             <button
               onClick={() => navigate('/upload-video')}
               className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition"
@@ -187,7 +190,7 @@ const VideoList = () => {
               <p className="text-gray-400 mb-4">
                 {showTokenVideos ? 'No token videos found' : 'No videos found'}
               </p>
-              {user?.isTeacher && (
+              {canSeeUploadButton && (
                 <button
                   onClick={() => navigate('/upload-video')}
                   className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition"
@@ -211,6 +214,14 @@ const VideoList = () => {
                       src={video.thumbnailUrl}
                       alt={video.title}
                       className="w-full h-full object-cover"
+                    />
+                  ) : video.videoUrl ? (
+                    <video
+                      src={video.videoUrl}
+                      className="w-full h-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-6xl">

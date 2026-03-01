@@ -18,6 +18,7 @@ import CourseListing from './pages/CourseListing'
 import CoursePage from './pages/CoursePage'
 import Subscription from './pages/Subscription'
 import Contact from './pages/Contact'
+import Invite from './pages/Invite'
 import About from './pages/About'
 import HowItWorks from './pages/HowItWorks'
 import Services from './pages/Services'
@@ -36,12 +37,23 @@ import MentorProfile from './pages/MentorProfile'
 import VideoUpload from './pages/VideoUpload'
 import VideoList from './pages/VideoList'
 import VideoPlayer from './pages/VideoPlayer'
+import AdminVideoPanel from './pages/AdminVideoPanel'
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useContext(AuthContext)
 
   if (loading) return <div>Loading...</div>
   return isAuthenticated ? children : <Navigate to="/login" />
+}
+
+const AdminRoute = ({ children }) => {
+  const { isAuthenticated, loading, user } = useContext(AuthContext)
+
+  if (loading) return <div>Loading...</div>
+  if (!isAuthenticated) return <Navigate to="/login" />
+
+  const isAllowed = user?.role === 'admin'
+  return isAllowed ? children : <Navigate to="/videos" />
 }
 
 const AppRoutes = () => {
@@ -162,6 +174,14 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <Contact />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/invite"
+          element={
+            <ProtectedRoute>
+              <Invite />
             </ProtectedRoute>
           }
         />
@@ -287,6 +307,14 @@ const AppRoutes = () => {
             <ProtectedRoute>
               <VideoUpload />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/videos"
+          element={
+            <AdminRoute>
+              <AdminVideoPanel />
+            </AdminRoute>
           }
         />
 

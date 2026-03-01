@@ -66,8 +66,9 @@ const LecturePlayer = () => {
 
     try {
       await userService.updateProgress({
-        lectureId: id,
-        completionPercentage: percent,
+        lectureId: id, 
+        completionPercentage: percent,  
+        
       })
     } catch (error) {
       console.error('Error updating lecture progress:', error)
@@ -77,6 +78,8 @@ const LecturePlayer = () => {
   if (loading) return <div>Loading...</div>
   if (!lecture) return <div>Lecture not found</div>
 
+  const lectureVideoUrl = lecture.Video?.videoUrl || lecture.videoUrl
+
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} py-8`}>
       <div className="max-w-7xl mx-auto px-4">
@@ -85,9 +88,9 @@ const LecturePlayer = () => {
           <div className="lg:col-span-2">
             <div className={`rounded-lg overflow-hidden shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
               <div className="aspect-video bg-black flex items-center justify-center">
-                {lecture.videoUrl ? (
+                {lectureVideoUrl ? (
                   <video
-                    src={lecture.videoUrl}
+                    src={lectureVideoUrl}
                     controls
                     ref={videoRef}
                     onTimeUpdate={handleTimeUpdate}

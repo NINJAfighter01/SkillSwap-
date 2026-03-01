@@ -2,6 +2,9 @@ const Review = require('../models/Review')
 const Rating = require('../models/Rating')
 const User = require('../models/User')
 const UserSkill = require('../models/UserSkill')
+const Session = require('../models/Session')
+const Skill = require('../models/Skill')
+const sequelize = require('../config/database')
 const { Op } = require('sequelize')
 
 // Create review for mentor
@@ -153,13 +156,49 @@ exports.getMentorProfile = async (req, res) => {
       where: { mentorId, status: 'Completed' },
     })
 
+    const totalSessions = await Session.count({ where: { mentorId } })
+    const completionRate = totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0
+
+    const responseSessions = await Session.findAll({
+      where: {
+        mentorId,
+        status: { [Op.in]: ['Approved', 'Rejected', 'Completed', 'Cancelled'] },
+      },
+      attributes: ['createdAt', 'updatedAt'],
+    })
+
+    const responseDurationsInMinutes = responseSessions
+      .map((session) => {
+        if (!session.createdAt || !session.updatedAt) return null
+        const diffMs = new Date(session.updatedAt).getTime() - new Date(session.createdAt).getTime()
+        if (diffMs <= 0) return null
+        return Math.round(diffMs / 60000)
+      })
+      .filter((value) => value !== null)
+
+    const averageResponseTimeMinutes =
+      responseDurationsInMinutes.length > 0
+        ? Math.round(responseDurationsInMinutes.reduce((sum, value) => sum + value, 0) / responseDurationsInMinutes.length)
+        : null
+
+    const isVerifiedMentor =
+      mentor.isTeacher === true &&
+      (mentor.averageRating || 0) >= 4.2 &&
+      totalReviews >= 3 &&
+      completedSessions >= 3
+
     res.json({
       mentor,
       stats: {
         totalReviews,
+        studentReviews: totalReviews,
+        totalSessions,
         completedSessions,
+        completionRate,
+        averageResponseTimeMinutes,
         averageRating: mentor.averageRating || 0,
         isTopMentor: mentor.averageRating >= 4.0,
+        isVerifiedMentor,
       },
     })
   } catch (error) {

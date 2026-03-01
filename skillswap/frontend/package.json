@@ -12,6 +12,7 @@
     "axios": "^1.6.0",
     "firebase": "^12.9.0",
     "html2pdf.js": "^0.14.0",
+    "lucide-react": "^0.575.0",
     "mammoth": "^1.11.0",
     "papaparse": "^5.5.3",
     "pdfjs-dist": "^5.4.624",

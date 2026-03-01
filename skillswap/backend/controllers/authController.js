@@ -4,7 +4,7 @@ const User = require('../models/User')
 
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user.id, email: user.email },
+    { id: user.id, email: user.email, role: user.role || 'user' },
     process.env.JWT_SECRET,
     { expiresIn: '30d' }
   )
@@ -37,6 +37,7 @@ exports.register = async (req, res, next) => {
         email: user.email,
         tokens: user.tokens,
         isTeacher: user.isTeacher,
+        role: user.role,
       },
     })
   } catch (error) {
@@ -69,6 +70,7 @@ exports.login = async (req, res, next) => {
         email: user.email,
         tokens: user.tokens,
         isTeacher: user.isTeacher,
+        role: user.role,
       },
     })
   } catch (error) {
@@ -144,6 +146,7 @@ exports.googleLogin = async (req, res, next) => {
         email: user.email,
         tokens: user.tokens,
         isTeacher: user.isTeacher,
+        role: user.role,
       },
     })
   } catch (error) {
@@ -178,6 +181,7 @@ exports.facebookLogin = async (req, res, next) => {
         name: user.name,
         email: user.email,
         tokens: user.tokens,
+        role: user.role,
       },
     })
   } catch (error) {
@@ -212,6 +216,7 @@ exports.microsoftLogin = async (req, res, next) => {
         name: user.name,
         email: user.email,
         tokens: user.tokens,
+        role: user.role,
       },
     })
   } catch (error) {
